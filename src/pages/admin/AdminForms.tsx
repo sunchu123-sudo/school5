@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Eye, Search, X, RotateCcw, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,15 +29,17 @@ import {
   loadFromStorage,
   saveToStorage,
 } from "@/lib/admin-storage";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  createForm,
+  deleteForm,
+  fetchAdminForms,
+  formWriteFromAdmin,
+  type AdminFormRecord,
+  updateForm,
+} from "@/services/formsService";
 
-type AdminForm = {
-  id: string;
-  title: string;
-  category: AdminFormCategory;
-  description: string;
-  fileUrl: string;
-  isVisible: boolean;
-};
+type AdminForm = AdminFormRecord;
 
 const FORM_CATEGORIES = ["請假", "校外教學", "獎助學金", "學生資料", "家長志工", "其他"] as const;
 type AdminFormCategory = (typeof FORM_CATEGORIES)[number];
@@ -108,6 +110,18 @@ function persistForms(list: AdminForm[]) {
   saveToStorage(ADMIN_STORAGE_KEYS.forms, list);
 }
 
+async function fetchCloudFormsList(): Promise<AdminForm[] | null> {
+  if (!isSupabaseConfigured()) return null;
+  const raw = await fetchAdminForms();
+  if (raw === null) return null;
+  return raw.map((r) => ({
+    ...r,
+    category: (FORM_CATEGORIES.includes(r.category as AdminFormCategory)
+      ? r.category
+      : "其他") as AdminFormCategory,
+  }));
+}
+
 function matchesSearch(item: AdminForm, query: string) {
   if (!query) return true;
   const q = query.toLowerCase();
@@ -119,13 +133,53 @@ function matchesSearch(item: AdminForm, query: string) {
 }
 
 export default function AdminForms() {
-  const [list, setList] = useState<AdminForm[]>(() => loadInitialForms());
+  const [list, setList] = useState<AdminForm[]>([]);
+  const [useCloud, setUseCloud] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("全部");
   const [formOpen, setFormOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<AdminForm | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (isSupabaseConfigured()) {
+        try {
+          const raw = await fetchAdminForms();
+          if (cancelled) return;
+          if (raw !== null) {
+            const next = raw.map((r) => ({
+              ...r,
+              category: (FORM_CATEGORIES.includes(r.category as AdminFormCategory)
+                ? r.category
+                : "其他") as AdminFormCategory,
+            }));
+            setUseCloud(true);
+            setList(next);
+            persistForms(next);
+            setHydrated(true);
+            return;
+          }
+          console.error("[AdminForms] fetchAdminForms 回傳 null");
+          toast.error("雲端資料庫讀取失敗，已改用瀏覽器暫存資料。");
+        } catch (e) {
+          console.error("[AdminForms] 初始載入雲端失敗", e);
+          if (!cancelled) toast.error("雲端資料庫讀取失敗，已改用瀏覽器暫存資料。");
+        }
+      }
+      if (!cancelled) {
+        setUseCloud(false);
+        setList(loadInitialForms());
+        setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim();
@@ -154,9 +208,100 @@ export default function AdminForms() {
     setFormOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim()) {
       toast.error("請填寫表單名稱");
+      return;
+    }
+
+    const writePayload = formWriteFromAdmin({
+      title: form.title.trim(),
+      category: form.category,
+      description: form.description.trim(),
+      fileUrl: form.fileUrl.trim(),
+      isVisible: form.isVisible,
+    });
+
+    const afterSaveClose = () => {
+      setFormOpen(false);
+      setEditingId(null);
+      setForm(emptyForm());
+    };
+
+    const runLocalEdit = (fallbackMsg: string) => {
+      if (editingId) {
+        const next = list.map((f) =>
+          f.id === editingId
+            ? {
+                ...f,
+                title: form.title.trim(),
+                category: form.category,
+                description: form.description.trim(),
+                fileUrl: form.fileUrl.trim(),
+                isVisible: form.isVisible,
+              }
+            : f,
+        );
+        setList(next);
+        persistForms(next);
+        toast.success(fallbackMsg);
+        if (previewItem?.id === editingId) {
+          setPreviewItem(next.find((f) => f.id === editingId) ?? null);
+        }
+      } else {
+        const newItem: AdminForm = {
+          id: `f-${Date.now()}`,
+          title: form.title.trim(),
+          category: form.category,
+          description: form.description.trim(),
+          fileUrl: form.fileUrl.trim(),
+          isVisible: form.isVisible,
+        };
+        const next = [...list, newItem];
+        setList(next);
+        persistForms(next);
+        toast.success(fallbackMsg);
+      }
+      afterSaveClose();
+    };
+
+    if (useCloud && isSupabaseConfigured()) {
+      try {
+        if (editingId) {
+          const ok = await updateForm(editingId, writePayload);
+          if (ok) {
+            const reloaded = await fetchCloudFormsList();
+            if (reloaded !== null) {
+              setList(reloaded);
+              persistForms(reloaded);
+              if (previewItem?.id === editingId) {
+                const updated = reloaded.find((x) => x.id === editingId);
+                if (updated) setPreviewItem(updated);
+              }
+              toast.success("已更新表單並儲存至雲端");
+              afterSaveClose();
+              return;
+            }
+          }
+        } else {
+          const created = await createForm(writePayload);
+          if (created?.id) {
+            const reloaded = await fetchCloudFormsList();
+            if (reloaded !== null) {
+              setList(reloaded);
+              persistForms(reloaded);
+              toast.success("已新增表單並儲存至雲端");
+              afterSaveClose();
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[AdminForms] 雲端儲存失敗", e);
+      }
+      toast.error("雲端資料庫操作失敗，請稍後再試。");
+      setUseCloud(false);
+      runLocalEdit("已將變更儲存在此瀏覽器（雲端暫無法同步）");
       return;
     }
 
@@ -178,7 +323,7 @@ export default function AdminForms() {
       if (previewItem?.id === editingId) {
         setPreviewItem(next.find((f) => f.id === editingId) ?? null);
       }
-      toast.success("已更新表單");
+      toast.success("已更新表單並儲存在此瀏覽器");
     } else {
       const newItem: AdminForm = {
         id: `f-${Date.now()}`,
@@ -191,25 +336,51 @@ export default function AdminForms() {
       const next = [...list, newItem];
       setList(next);
       persistForms(next);
-      toast.success("已新增表單");
+      toast.success("已新增表單並儲存在此瀏覽器");
     }
 
-    setFormOpen(false);
-    setEditingId(null);
-    setForm(emptyForm());
+    afterSaveClose();
   };
 
-  const handleDelete = (item: AdminForm) => {
+  const handleDelete = async (item: AdminForm) => {
     const ok = window.confirm(`確定要刪除「${item.title}」嗎？此操作無法復原（可使用「恢復預設表單」還原 mock 資料）。`);
     if (!ok) return;
+
+    let fallbackFromCloudFailure = false;
+
+    if (useCloud && isSupabaseConfigured()) {
+      try {
+        const deleted = await deleteForm(item.id);
+        if (deleted) {
+          const reloaded = await fetchCloudFormsList();
+          if (reloaded !== null) {
+            setList(reloaded);
+            persistForms(reloaded);
+            if (previewItem?.id === item.id) setPreviewItem(null);
+            toast.success("已刪除雲端表單");
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("[AdminForms] 雲端刪除失敗", e);
+      }
+      toast.error("雲端資料庫操作失敗，請稍後再試。");
+      setUseCloud(false);
+      fallbackFromCloudFailure = true;
+    }
+
     const next = list.filter((f) => f.id !== item.id);
     setList(next);
     persistForms(next);
     if (previewItem?.id === item.id) setPreviewItem(null);
-    toast.success("已刪除表單");
+    toast.success(fallbackFromCloudFailure ? "已從瀏覽器暫存移除表單" : "已刪除表單");
   };
 
   const handleReset = () => {
+    if (useCloud && isSupabaseConfigured()) {
+      toast.info("目前使用雲端資料庫，恢復預設功能暫不會清除雲端資料。");
+      return;
+    }
     const ok = window.confirm("確定要恢復預設表單資料嗎？目前瀏覽器中的表單修改將全部清除。");
     if (!ok) return;
     clearStorage(ADMIN_STORAGE_KEYS.forms);
@@ -222,6 +393,15 @@ export default function AdminForms() {
     toast.success("已恢復預設表單資料");
   };
 
+  if (!hydrated) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-foreground">表單管理</h2>
+        <p className="text-sm text-muted-foreground">資料載入中…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -230,8 +410,10 @@ export default function AdminForms() {
           <p className="mt-1 text-sm text-muted-foreground">
             共 {list.length} 份表單 · 目前顯示 {filtered.length} 份
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            目前表單資料儲存在此瀏覽器中，尚未連接雲端資料庫。
+          <p className="mt-1 text-xs font-medium text-foreground">
+            {useCloud && isSupabaseConfigured()
+              ? "目前資料來源：Supabase 雲端資料庫"
+              : "目前資料來源：此瀏覽器暫存資料"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -355,7 +537,7 @@ export default function AdminForms() {
                   variant="outline"
                   size="sm"
                   className="text-destructive"
-                  onClick={() => handleDelete(f)}
+                  onClick={() => void handleDelete(f)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   刪除
@@ -432,7 +614,7 @@ export default function AdminForms() {
             <Button variant="outline" className="rounded-xl" onClick={() => setFormOpen(false)}>
               取消
             </Button>
-            <Button className="rounded-xl" onClick={handleSave}>
+            <Button className="rounded-xl" onClick={() => void handleSave()}>
               儲存
             </Button>
           </DialogFooter>

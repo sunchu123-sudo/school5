@@ -166,6 +166,8 @@ export type PublicTodayLunch = {
   sideDishes: string[];
   soup: string;
   fruit: string;
+  /** 來自 Supabase lunch_menus.nutrition_note，無則省略 */
+  nutritionNote?: string;
 };
 
 /** 前台今日午餐：優先讀 admin_today_lunch，否則使用 mock.ts */
@@ -351,6 +353,11 @@ function buildDefaultSchoolInfo(): PublicSchoolInfo {
     vision: visionSection?.content ?? "",
     transportation: locationInfo.transport.join("\n"),
   };
+}
+
+/** 僅 mock 衍生預設（地圖連結文字等），不含 localStorage；供 Supabase 列映射填補欄位 */
+export function getStaticSchoolInfoDefaults(): PublicSchoolInfo {
+  return buildDefaultSchoolInfo();
 }
 
 function normalizeSchoolInfo(item: Record<string, unknown>): PublicSchoolInfo {

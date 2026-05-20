@@ -1,6 +1,6 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { schoolIntroSections } from "@/data/mock";
-import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getFallbackSchoolInfo, loadPublicSchoolInfo } from "@/services/schoolService";
 import { School, Sparkles, Mountain, Target } from "lucide-react";
 

@@ -4,8 +4,8 @@ import {
   ChevronRight, School, Utensils as UtensilsIcon, CalendarCheck, BellRing, Sun,
 } from "lucide-react";
 import { events, todayHighlights, todayInfo } from "@/data/mock";
-import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
-import { getPublicAnnouncements, getPublicTodayLunch } from "@/lib/storage";
+import { PublicDataLoading, usePublicData } from "@/lib/publicData";
+import { getPublicAnnouncements } from "@/lib/storage";
 import { loadPublicAnnouncements } from "@/services/announcementsService";
 import { getFallbackTodayLunch, loadPublicTodayLunch } from "@/services/lunchService";
 
@@ -155,6 +155,9 @@ export default function Home() {
           </Link>
         </div>
         <div className="space-y-3">
+          {!announcementsLoading && latest.length === 0 && (
+            <div className="card-base p-6 text-center text-sm text-muted-foreground">目前暫無資料</div>
+          )}
           {latest.slice(0, 3).map((a) => (
             <Link key={a.id} to={`/announcements/${a.id}`} className="card-base p-4 block active:scale-[0.99] transition-transform">
               <div className="flex items-center gap-2 text-xs">

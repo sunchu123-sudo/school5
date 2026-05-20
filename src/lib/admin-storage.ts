@@ -15,6 +15,12 @@ export interface AdminTodayLunchForm {
   sideDish2: string;
   soup: string;
   fruit: string;
+  /** 雲端列 id（本機暫存可無） */
+  id?: string;
+  /** YYYY-MM-DD，對應 lunch_menus.date */
+  date?: string;
+  /** 營養備註，對應 nutrition_note */
+  nutritionNote?: string;
 }
 
 function readJson<T>(key: string, validate: (value: unknown) => value is T): T | null {
@@ -55,14 +61,18 @@ export function isAdminAnnouncementArray(value: unknown): value is Record<string
 
 export function isAdminTodayLunchForm(value: unknown): value is AdminTodayLunchForm {
   if (!isRecord(value)) return false;
-  return (
+  const base =
     typeof value.main === "string" &&
     typeof value.mainDish === "string" &&
     typeof value.sideDish1 === "string" &&
     typeof value.sideDish2 === "string" &&
     typeof value.soup === "string" &&
-    typeof value.fruit === "string"
-  );
+    typeof value.fruit === "string";
+  if (!base) return false;
+  if (value.id !== undefined && typeof value.id !== "string") return false;
+  if (value.date !== undefined && typeof value.date !== "string") return false;
+  if (value.nutritionNote !== undefined && typeof value.nutritionNote !== "string") return false;
+  return true;
 }
 
 export function isSchoolEventArray(value: unknown): value is Record<string, unknown>[] {
@@ -132,6 +142,7 @@ export function lunchFromMock(lunch: {
   soup: string;
   fruit: string;
 }): AdminTodayLunchForm {
+  const today = new Date().toISOString().slice(0, 10);
   return {
     main: lunch.main,
     mainDish: lunch.mainDish,
@@ -139,6 +150,8 @@ export function lunchFromMock(lunch: {
     sideDish2: lunch.sideDishes[1] ?? "",
     soup: lunch.soup,
     fruit: lunch.fruit,
+    date: today,
+    nutritionNote: "",
   };
 }
 

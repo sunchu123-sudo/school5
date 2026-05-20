@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import { SchoolEvent } from "@/data/mock";
-import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getPublicCalendarEvents } from "@/lib/storage";
 import { loadPublicCalendarEvents } from "@/services/calendarService";
 import { cn } from "@/lib/utils";
@@ -48,7 +48,7 @@ function EventCard({ e }: { e: SchoolEvent }) {
 
 export default function CalendarPage() {
   const [cat, setCat] = useState<(typeof cats)[number]>("全部");
-  const { data: events, loading } = usePublicData(
+  const { data: events, loading, isEmpty } = usePublicData(
     loadPublicCalendarEvents,
     getPublicCalendarEvents,
   );
@@ -81,6 +81,14 @@ export default function CalendarPage() {
 
       {loading && <PublicDataLoading className="px-5 pt-4 text-center text-sm text-muted-foreground" />}
 
+      {!loading && isEmpty && (
+        <div className="px-5 pt-4">
+          <PublicDataEmpty />
+        </div>
+      )}
+
+      {!loading && !isEmpty && (
+        <>
       <section className="px-5 mt-5">
         <h2 className="text-base font-bold mb-3">今日活動</h2>
         {todayE.length ? (
@@ -99,6 +107,8 @@ export default function CalendarPage() {
         <h2 className="text-base font-bold mb-3">本月重要活動</h2>
         <div className="space-y-3">{month.map((e) => <EventCard key={e.id} e={e} />)}</div>
       </section>
+        </>
+      )}
     </main>
   );
 }

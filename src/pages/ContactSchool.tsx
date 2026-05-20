@@ -1,7 +1,7 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { useBackLink } from "@/hooks/use-back-link";
 import { contactTopics } from "@/data/mock";
-import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getFallbackSchoolInfo, loadPublicSchoolInfo } from "@/services/schoolService";
 import { Clock, MapPin, Phone, Map, MessageCircle } from "lucide-react";
 

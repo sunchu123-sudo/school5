@@ -14,3 +14,9 @@ npm run dev
 ## 部署至 Vercel
 
 請參考 [DEPLOY.md](./DEPLOY.md)。
+
+## Supabase（雲端資料庫）
+
+第一次連線請依序完成：[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)。  
+一鍵推送資料庫：`npm run db:link`（一次）→ `npm run db:push`。  
+驗收勾選：[SUPABASE_VERIFY.md](./SUPABASE_VERIFY.md)。

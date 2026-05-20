@@ -324,7 +324,8 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 
 ```
 src/lib/supabaseClient.ts
-src/lib/dataFallback.tsx
+src/lib/dataFallback.ts
+src/lib/publicData.tsx
 src/lib/adminBackup.ts
 src/services/announcementsService.ts
 src/services/calendarService.ts

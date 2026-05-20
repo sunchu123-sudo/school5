@@ -1,7 +1,7 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { useBackLink } from "@/hooks/use-back-link";
 import { todayInfo, weeklyLunch, nutritionTip } from "@/data/mock";
-import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getFallbackTodayLunch, loadPublicTodayLunch } from "@/services/lunchService";
 import { Apple, Leaf, UtensilsCrossed } from "lucide-react";
 
@@ -94,7 +94,7 @@ export default function LunchInfo() {
               <div className="w-10 h-10 rounded-xl bg-accent-soft text-accent grid place-items-center shrink-0">
                 <Apple size={20} />
               </div>
-              <p className="text-[14px] leading-relaxed text-foreground/90">{nutritionTip}</p>
+              <p className="text-[14px] leading-relaxed text-foreground/90">{todayLunch.nutritionNote ?? nutritionTip}</p>
             </div>
           </div>
         </section>

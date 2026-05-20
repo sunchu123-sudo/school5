@@ -1,7 +1,7 @@
 # Supabase 資料庫設定說明
 
 **階段：** v2.0-C — 資料表 SQL 與初始資料  
-**狀態：** 僅 SQL 與文件，尚未修改 App 程式碼
+**狀態：** 建表與 RLS 已與 App 串接；完整設定步驟見根目錄 [**SUPABASE_SETUP.md**](../SUPABASE_SETUP.md)。
 
 ---
 
@@ -86,6 +86,13 @@ GET /rest/v1/announcements?is_visible=eq.true
 
 因此目前後台無法透過前端 anon key 直接寫入 Supabase，這是預期行為。
 
+**本機／示範若要讓後台以 anon key 讀寫：** 請另執行（僅限非正式環境，**依序**）  
+
+1. [`policies_dev_anon_announcements_lunch.sql`](./policies_dev_anon_announcements_lunch.sql) — 公告、午餐  
+2. [`policies_dev_anon_calendar_albums_school_forms.sql`](./policies_dev_anon_calendar_albums_school_forms.sql) — 行事曆、相簿、學校資料、表單  
+
+說明見 [SUPABASE_SETUP.md](../SUPABASE_SETUP.md) 步驟 3。
+
 ---
 
 ## 4. 後台寫入正式版需要 Supabase Auth
@@ -101,15 +108,15 @@ GET /rest/v1/announcements?is_visible=eq.true
 
 ---
 
-## 5. 下一階段 v2.0-D 才會讓前台改讀 Supabase
+## 5. 與 App 的對應（v2.0-D / v2.0-E）
 
-| 階段 | 內容 | App 程式碼 |
-|------|------|------------|
-| **v2.0-C（本階段）** | SQL 建表 + 初始資料 + RLS 讀取 | **不修改** |
-| **v2.0-D（下一階段）** | `supabaseClient.ts`、service 層、前台改讀 Supabase | 才開始修改 |
+| 階段 | 內容 |
+|------|------|
+| **v2.0-C** | `schema.sql` 建表、種子、公開讀取 RLS |
+| **v2.0-D** | 前台優先讀 Supabase（`src/lib/supabaseClient.ts`、`src/services/*`） |
+| **v2.0-E** | 後台公告／午餐寫入雲端（可選開發用政策見上） |
 
-目前 App 仍使用 **localStorage** 與 **mock.ts**，與 Supabase 尚未連線。  
-執行本 SQL 不會影響 `npm run dev` 或 `npm run build`。
+未設定環境變數時，App 仍使用 **localStorage** 與 **mock.ts**。
 
 ---
 
@@ -117,12 +124,16 @@ GET /rest/v1/announcements?is_visible=eq.true
 
 | 檔案 | 說明 |
 |------|------|
-| [`schema.sql`](./schema.sql) | 建表、索引、trigger、RLS、初始資料 |
+| [`schema.sql`](./schema.sql) | 建表、索引、trigger、RLS、初始資料（手動 SQL Editor 或與 migrations 同步） |
+| [`migrations/`](./migrations/) | Supabase CLI `npm run db:push` 套用順序 |
+| [`policies_dev_anon_announcements_lunch.sql`](./policies_dev_anon_announcements_lunch.sql) | 開發用：anon 讀寫公告與午餐（**勿用於正式站**） |
+| [`policies_dev_anon_calendar_albums_school_forms.sql`](./policies_dev_anon_calendar_albums_school_forms.sql) | 開發用：anon 讀寫行事曆／相簿／學校／表單（**勿用於正式站**） |
 | [`README.md`](./README.md) | 本說明文件 |
 
 ---
 
 ## 7. 相關文件
 
+- [`../SUPABASE_SETUP.md`](../SUPABASE_SETUP.md) — **建專案、SQL、.env、驗證（建議從此開始）**
 - [`../SUPABASE_PLAN_v2.0.md`](../SUPABASE_PLAN_v2.0.md) — v2.0 整體規畫
 - [`../DEPLOYMENT.md`](../DEPLOYMENT.md) — Vercel 部署說明

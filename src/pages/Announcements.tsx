@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Search, Paperclip, ExternalLink } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { AnnouncementCategory } from "@/data/mock";
-import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getPublicAnnouncements } from "@/lib/storage";
 import { loadPublicAnnouncements } from "@/services/announcementsService";
 import { cn } from "@/lib/utils";

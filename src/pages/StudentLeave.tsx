@@ -1,6 +1,6 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { leaveProcess, leaveDocuments } from "@/data/mock";
-import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getFallbackSchoolInfo, loadPublicSchoolInfo } from "@/services/schoolService";
 import { ClipboardList, FileText, Phone, ClipboardEdit } from "lucide-react";
 import { toast } from "sonner";

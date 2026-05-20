@@ -1,5 +1,5 @@
 import BackPageHeader from "@/components/BackPageHeader";
-import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getFallbackForms, loadPublicForms } from "@/services/formsService";
 import { Download, FileText } from "lucide-react";
 import { toast } from "sonner";

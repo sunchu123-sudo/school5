@@ -25,6 +25,35 @@ type AnnouncementRow = {
   is_visible: boolean;
 };
 
+/** 後台列表／編輯用（分類維持資料庫字串，不轉 mock 分類） */
+export type AdminAnnouncementRecord = {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+  date: string;
+  summary: string;
+  important?: boolean;
+  pinned?: boolean;
+  attachmentUrl?: string;
+  externalUrl?: string;
+  isVisible?: boolean;
+};
+
+/** 寫入 Supabase 用（camelCase → 內部轉 snake_case） */
+export type AnnouncementWriteInput = {
+  title: string;
+  category: string;
+  content: string;
+  date: string;
+  isImportant: boolean;
+  isPinned: boolean;
+  externalLink?: string | null;
+  /** JSON 陣列，可為字串網址或 { url: string } */
+  attachments?: unknown;
+  isVisible?: boolean;
+};
+
 function mapCategory(category: string): AnnouncementCategory {
   return (
     ADMIN_TO_MOCK_CATEGORY[category] ??
@@ -45,7 +74,7 @@ function firstAttachmentUrl(attachments: unknown): string | undefined {
   return undefined;
 }
 
-function mapRow(row: AnnouncementRow): Announcement & { pinned?: boolean } {
+function mapRowForPublic(row: AnnouncementRow): Announcement & { pinned?: boolean } {
   const content = row.content ?? "";
   const announcement: Announcement & { pinned?: boolean } = {
     id: row.id,
@@ -66,7 +95,27 @@ function mapRow(row: AnnouncementRow): Announcement & { pinned?: boolean } {
   return announcement;
 }
 
-function sortAnnouncements(list: (Announcement & { pinned?: boolean })[]) {
+function mapRowForAdmin(row: AnnouncementRow): AdminAnnouncementRecord {
+  const content = row.content ?? "";
+  const summary = content.slice(0, 80);
+  const rec: AdminAnnouncementRecord = {
+    id: row.id,
+    title: row.title ?? "",
+    category: row.category ?? "其他",
+    content,
+    date: row.date,
+    summary,
+    important: !!row.is_important,
+    pinned: !!row.is_pinned,
+    isVisible: row.is_visible !== false,
+  };
+  const attachmentUrl = firstAttachmentUrl(row.attachments);
+  if (attachmentUrl) rec.attachmentUrl = attachmentUrl;
+  if (row.external_link) rec.externalUrl = row.external_link;
+  return rec;
+}
+
+function sortAnnouncementsPublic(list: (Announcement & { pinned?: boolean })[]) {
   return [...list].sort((a, b) => {
     const aPinned = a.pinned ? 1 : 0;
     const bPinned = b.pinned ? 1 : 0;
@@ -75,27 +124,193 @@ function sortAnnouncements(list: (Announcement & { pinned?: boolean })[]) {
   });
 }
 
-/** 僅從 Supabase 讀取；未設定或失敗回傳 null */
+function sortAnnouncementsAdmin(list: AdminAnnouncementRecord[]) {
+  return [...list].sort((a, b) => {
+    const aPinned = a.pinned ? 1 : 0;
+    const bPinned = b.pinned ? 1 : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
+    return b.date.localeCompare(a.date);
+  });
+}
+
+function attachmentsToJsonb(attachments: unknown, attachmentUrl?: string): unknown {
+  if (attachments !== undefined && attachments !== null) return attachments;
+  if (typeof attachmentUrl === "string" && attachmentUrl.trim()) return [attachmentUrl.trim()];
+  return [];
+}
+
+function writeInputToDbRow(data: AnnouncementWriteInput, id?: string): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    title: data.title.trim(),
+    category: data.category,
+    content: data.content.trim(),
+    date: data.date,
+    is_important: data.isImportant,
+    is_pinned: data.isPinned,
+    external_link: data.externalLink?.trim() || null,
+    attachments: attachmentsToJsonb(data.attachments, undefined),
+    is_visible: data.isVisible !== false,
+  };
+  if (id) row.id = id;
+  return row;
+}
+
+/** 由後台表單（attachmentUrl 單欄）組出寫入 payload */
+export function announcementWriteFromAdminForm(input: {
+  title: string;
+  category: string;
+  content: string;
+  date: string;
+  important: boolean;
+  pinned: boolean;
+  attachmentUrl?: string;
+  externalUrl?: string;
+  isVisible?: boolean;
+}): AnnouncementWriteInput {
+  return {
+    title: input.title,
+    category: input.category,
+    content: input.content,
+    date: input.date,
+    isImportant: input.important,
+    isPinned: input.pinned,
+    externalLink: input.externalUrl?.trim() || null,
+    attachments:
+      typeof input.attachmentUrl === "string" && input.attachmentUrl.trim()
+        ? [input.attachmentUrl.trim()]
+        : [],
+    isVisible: input.isVisible !== false,
+  };
+}
+
+/** 僅從 Supabase 讀取（前台）；未設定或失敗回傳 null */
 export async function fetchAnnouncements(): Promise<(Announcement & { pinned?: boolean })[] | null> {
   if (!isSupabaseConfigured()) return null;
 
   const supabase = getSupabaseClient();
   if (!supabase) return null;
 
-  const { data, error } = await supabase
-    .from("announcements")
-    .select("*")
-    .eq("is_visible", true)
-    .order("is_pinned", { ascending: false })
-    .order("date", { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from("announcements")
+      .select("*")
+      .eq("is_visible", true)
+      .order("is_pinned", { ascending: false })
+      .order("date", { ascending: false });
 
-  if (error) throw error;
-  if (!data || data.length === 0) return null;
+    if (error) {
+      console.warn("[announcementsService] Supabase announcements:", error.message);
+      return null;
+    }
+    if (!data || data.length === 0) return null;
 
-  return sortAnnouncements(data.map((row) => mapRow(row as AnnouncementRow)));
+    return sortAnnouncementsPublic(data.map((r) => mapRowForPublic(r as AnnouncementRow)));
+  } catch (e) {
+    console.warn("[announcementsService] fetchAnnouncements 失敗", e);
+    return null;
+  }
 }
 
-/** 僅從 Supabase 依 id 讀取 */
+/** 後台：讀取全部公告（含 is_visible = false） */
+export async function fetchAdminAnnouncements(): Promise<AdminAnnouncementRecord[] | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from("announcements")
+      .select("*")
+      .order("is_pinned", { ascending: false })
+      .order("date", { ascending: false });
+
+    if (error) {
+      console.error("[announcementsService] fetchAdminAnnouncements:", error.message);
+      return null;
+    }
+
+    return sortAnnouncementsAdmin((data ?? []).map((r) => mapRowForAdmin(r as AnnouncementRow)));
+  } catch (e) {
+    console.error("[announcementsService] fetchAdminAnnouncements 失敗", e);
+    return null;
+  }
+}
+
+/**
+ * 新增公告至 Supabase。
+ * 正式環境若改為軟刪除，可改為 update is_visible = false 而非 delete（見 deleteAnnouncement）。
+ */
+export async function createAnnouncement(data: AnnouncementWriteInput): Promise<{ id: string } | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  const row = writeInputToDbRow(data);
+  try {
+    const { data: inserted, error } = await supabase.from("announcements").insert(row).select("id").single();
+
+    if (error) {
+      console.error("[announcementsService] createAnnouncement:", error.message);
+      return null;
+    }
+    if (!inserted || typeof (inserted as { id?: string }).id !== "string") return null;
+    return { id: (inserted as { id: string }).id };
+  } catch (e) {
+    console.error("[announcementsService] createAnnouncement 失敗", e);
+    return null;
+  }
+}
+
+export async function updateAnnouncement(id: string, data: AnnouncementWriteInput): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  const row = writeInputToDbRow(data);
+  delete row.id;
+
+  try {
+    const { error } = await supabase.from("announcements").update(row).eq("id", id);
+
+    if (error) {
+      console.error("[announcementsService] updateAnnouncement:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[announcementsService] updateAnnouncement 失敗", e);
+    return false;
+  }
+}
+
+/**
+ * 硬刪除公告列。
+ * 提醒：正式上線可改為 is_visible = false 軟刪除，以保留稽核與復原。
+ */
+export async function deleteAnnouncement(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from("announcements").delete().eq("id", id);
+
+    if (error) {
+      console.error("[announcementsService] deleteAnnouncement:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[announcementsService] deleteAnnouncement 失敗", e);
+    return false;
+  }
+}
+
+/** 僅從 Supabase 依 id 讀取（前台，僅可見） */
 export async function fetchAnnouncementById(
   id: string,
 ): Promise<(Announcement & { pinned?: boolean }) | null> {
@@ -104,17 +319,25 @@ export async function fetchAnnouncementById(
   const supabase = getSupabaseClient();
   if (!supabase) return null;
 
-  const { data, error } = await supabase
-    .from("announcements")
-    .select("*")
-    .eq("id", id)
-    .eq("is_visible", true)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("announcements")
+      .select("*")
+      .eq("id", id)
+      .eq("is_visible", true)
+      .maybeSingle();
 
-  if (error) throw error;
-  if (!data) return null;
+    if (error) {
+      console.warn("[announcementsService] Supabase announcement by id:", error.message);
+      return null;
+    }
+    if (!data) return null;
 
-  return mapRow(data as AnnouncementRow);
+    return mapRowForPublic(data as AnnouncementRow);
+  } catch (e) {
+    console.warn("[announcementsService] fetchAnnouncementById 失敗", e);
+    return null;
+  }
 }
 
 /** Supabase → localStorage → mock */

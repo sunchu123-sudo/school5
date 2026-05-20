@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Eye, Search, Pin, X, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,15 @@ import {
   loadFromStorage,
   saveToStorage,
 } from "@/lib/admin-storage";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  announcementWriteFromAdminForm,
+  createAnnouncement,
+  deleteAnnouncement,
+  fetchAdminAnnouncements,
+  type AdminAnnouncementRecord,
+  updateAnnouncement,
+} from "@/services/announcementsService";
 
 const ADMIN_CATEGORIES = ["學校公告", "活動通知", "家長通知", "午餐資訊", "其他"] as const;
 type AdminCategory = (typeof ADMIN_CATEGORIES)[number];
@@ -102,6 +111,32 @@ function persistAnnouncements(list: AdminAnnouncement[]) {
   saveToStorage(ADMIN_STORAGE_KEYS.announcements, list);
 }
 
+function coerceAdminCategory(c: string): AdminCategory {
+  return ADMIN_CATEGORIES.includes(c as AdminCategory) ? (c as AdminCategory) : "其他";
+}
+
+function recordsToAdminList(records: AdminAnnouncementRecord[]): AdminAnnouncement[] {
+  return records.map((r) => ({
+    id: r.id,
+    title: r.title,
+    date: r.date,
+    category: coerceAdminCategory(r.category),
+    content: r.content,
+    summary: r.summary || r.content.trim().slice(0, 80),
+    important: r.important,
+    pinned: r.pinned,
+    attachmentUrl: r.attachmentUrl,
+    externalUrl: r.externalUrl,
+  }));
+}
+
+async function fetchCloudAdminList(): Promise<AdminAnnouncement[] | null> {
+  if (!isSupabaseConfigured()) return null;
+  const raw = await fetchAdminAnnouncements();
+  if (raw === null) return null;
+  return recordsToAdminList(raw);
+}
+
 function matchesSearch(item: AdminAnnouncement, query: string) {
   if (!query) return true;
   const q = query.toLowerCase();
@@ -109,13 +144,47 @@ function matchesSearch(item: AdminAnnouncement, query: string) {
 }
 
 export default function AdminAnnouncements() {
-  const [list, setList] = useState<AdminAnnouncement[]>(() => loadInitialAnnouncements());
+  const [list, setList] = useState<AdminAnnouncement[]>([]);
+  const [useCloud, setUseCloud] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("全部");
   const [formOpen, setFormOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<AdminAnnouncement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (isSupabaseConfigured()) {
+        try {
+          const raw = await fetchAdminAnnouncements();
+          if (cancelled) return;
+          if (raw !== null) {
+            const next = recordsToAdminList(raw);
+            setUseCloud(true);
+            setList(next);
+            persistAnnouncements(next);
+            setHydrated(true);
+            return;
+          }
+          toast.error("雲端資料庫操作失敗，請稍後再試。");
+        } catch (e) {
+          console.error("[AdminAnnouncements] 初始載入雲端失敗", e);
+          if (!cancelled) toast.error("雲端資料庫操作失敗，請稍後再試。");
+        }
+      }
+      if (!cancelled) {
+        setUseCloud(false);
+        setList(loadInitialAnnouncements());
+        setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim();
@@ -147,7 +216,13 @@ export default function AdminAnnouncements() {
     setFormOpen(true);
   };
 
-  const handleSave = () => {
+  const applyLocalSave = (next: AdminAnnouncement[], successToast: string) => {
+    setList(next);
+    persistAnnouncements(next);
+    toast.success(successToast);
+  };
+
+  const handleSave = async () => {
     if (!form.title.trim()) {
       toast.error("請填寫公告標題");
       return;
@@ -158,6 +233,113 @@ export default function AdminAnnouncements() {
     }
 
     const summary = form.content.trim().slice(0, 80);
+    const writePayload = announcementWriteFromAdminForm({
+      title: form.title.trim(),
+      category: form.category,
+      content: form.content.trim(),
+      date: form.date,
+      important: form.important,
+      pinned: form.pinned,
+    });
+
+    const afterSaveClose = () => {
+      setFormOpen(false);
+      setEditingId(null);
+      setForm(emptyForm());
+    };
+
+    const runLocalEdit = (fallbackMsg: string) => {
+      if (editingId) {
+        const next = list.map((a) =>
+          a.id === editingId
+            ? {
+                ...a,
+                title: form.title.trim(),
+                date: form.date,
+                category: form.category,
+                content: form.content.trim(),
+                summary,
+                important: form.important,
+                pinned: form.pinned,
+              }
+            : a,
+        );
+        setList(next);
+        persistAnnouncements(next);
+        toast.success(fallbackMsg);
+        if (previewItem?.id === editingId) {
+          setPreviewItem((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  title: form.title.trim(),
+                  date: form.date,
+                  category: form.category,
+                  content: form.content.trim(),
+                  summary,
+                  important: form.important,
+                  pinned: form.pinned,
+                }
+              : null,
+          );
+        }
+      } else {
+        const newItem: AdminAnnouncement = {
+          id: `a-${Date.now()}`,
+          title: form.title.trim(),
+          date: form.date,
+          category: form.category,
+          content: form.content.trim(),
+          summary,
+          important: form.important,
+          pinned: form.pinned,
+        };
+        setList([...list, newItem]);
+        persistAnnouncements([...list, newItem]);
+        toast.success(fallbackMsg);
+      }
+      afterSaveClose();
+    };
+
+    if (useCloud && isSupabaseConfigured()) {
+      try {
+        if (editingId) {
+          const ok = await updateAnnouncement(editingId, writePayload);
+          if (ok) {
+            const reloaded = await fetchCloudAdminList();
+            if (reloaded !== null) {
+              setList(reloaded);
+              persistAnnouncements(reloaded);
+              if (previewItem?.id === editingId) {
+                const updated = reloaded.find((x) => x.id === editingId);
+                if (updated) setPreviewItem(updated);
+              }
+              toast.success("已更新公告並儲存至雲端");
+              afterSaveClose();
+              return;
+            }
+          }
+        } else {
+          const created = await createAnnouncement(writePayload);
+          if (created?.id) {
+            const reloaded = await fetchCloudAdminList();
+            if (reloaded !== null) {
+              setList(reloaded);
+              persistAnnouncements(reloaded);
+              toast.success("已新增公告並儲存至雲端");
+              afterSaveClose();
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[AdminAnnouncements] 雲端儲存失敗", e);
+      }
+      toast.error("雲端資料庫操作失敗，請稍後再試。");
+      setUseCloud(false);
+      runLocalEdit("已將變更儲存在此瀏覽器（雲端暫無法同步）");
+      return;
+    }
 
     if (editingId) {
       const next = list.map((a) =>
@@ -174,8 +356,7 @@ export default function AdminAnnouncements() {
             }
           : a,
       );
-      setList(next);
-      persistAnnouncements(next);
+      applyLocalSave(next, "已更新公告並儲存在此瀏覽器");
       if (previewItem?.id === editingId) {
         setPreviewItem((prev) =>
           prev
@@ -192,7 +373,6 @@ export default function AdminAnnouncements() {
             : null,
         );
       }
-      toast.success("已更新公告");
     } else {
       const newItem: AdminAnnouncement = {
         id: `a-${Date.now()}`,
@@ -204,28 +384,51 @@ export default function AdminAnnouncements() {
         important: form.important,
         pinned: form.pinned,
       };
-      const next = [...list, newItem];
-      setList(next);
-      persistAnnouncements(next);
-      toast.success("已新增公告");
+      applyLocalSave([...list, newItem], "已新增公告並儲存在此瀏覽器");
     }
 
-    setFormOpen(false);
-    setEditingId(null);
-    setForm(emptyForm());
+    afterSaveClose();
   };
 
-  const handleDelete = (item: AdminAnnouncement) => {
+  const handleDelete = async (item: AdminAnnouncement) => {
     const ok = window.confirm(`確定要刪除「${item.title}」嗎？此操作無法復原（可使用「恢復預設公告」還原 mock 資料）。`);
     if (!ok) return;
+
+    let fallbackFromCloudFailure = false;
+
+    if (useCloud && isSupabaseConfigured()) {
+      try {
+        const deleted = await deleteAnnouncement(item.id);
+        if (deleted) {
+          const reloaded = await fetchCloudAdminList();
+          if (reloaded !== null) {
+            setList(reloaded);
+            persistAnnouncements(reloaded);
+            if (previewItem?.id === item.id) setPreviewItem(null);
+            toast.success("已刪除雲端公告");
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("[AdminAnnouncements] 雲端刪除失敗", e);
+      }
+      toast.error("雲端資料庫操作失敗，請稍後再試。");
+      setUseCloud(false);
+      fallbackFromCloudFailure = true;
+    }
+
     const next = list.filter((a) => a.id !== item.id);
     setList(next);
     persistAnnouncements(next);
     if (previewItem?.id === item.id) setPreviewItem(null);
-    toast.success("已刪除公告");
+    toast.success(fallbackFromCloudFailure ? "已從瀏覽器暫存移除公告" : "已刪除公告");
   };
 
   const handleReset = () => {
+    if (useCloud && isSupabaseConfigured()) {
+      toast.info("目前使用雲端資料庫，恢復預設功能暫不會清除雲端資料。");
+      return;
+    }
     const ok = window.confirm("確定要恢復預設公告資料嗎？目前瀏覽器中的公告修改將全部清除。");
     if (!ok) return;
     clearStorage(ADMIN_STORAGE_KEYS.announcements);
@@ -238,6 +441,15 @@ export default function AdminAnnouncements() {
     toast.success("已恢復預設公告資料");
   };
 
+  if (!hydrated) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-foreground">公告管理</h2>
+        <p className="text-sm text-muted-foreground">資料載入中…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -246,8 +458,10 @@ export default function AdminAnnouncements() {
           <p className="mt-1 text-sm text-muted-foreground">
             共 {list.length} 則公告 · 目前顯示 {filtered.length} 則
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            目前資料儲存在此瀏覽器中，尚未連接雲端資料庫。
+          <p className="mt-1 text-xs font-medium text-foreground">
+            {useCloud && isSupabaseConfigured()
+              ? "目前資料來源：Supabase 雲端資料庫"
+              : "目前資料來源：此瀏覽器暫存資料"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -396,7 +610,7 @@ export default function AdminAnnouncements() {
                             variant="ghost"
                             size="sm"
                             className="text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(a)}
+                            onClick={() => void handleDelete(a)}
                           >
                             <Trash2 className="h-4 w-4" />
                             刪除
@@ -443,7 +657,7 @@ export default function AdminAnnouncements() {
                       variant="outline"
                       size="sm"
                       className="text-destructive"
-                      onClick={() => handleDelete(a)}
+                      onClick={() => void handleDelete(a)}
                     >
                       刪除
                     </Button>
@@ -532,7 +746,7 @@ export default function AdminAnnouncements() {
             <Button variant="outline" className="rounded-xl" onClick={() => setFormOpen(false)}>
               取消
             </Button>
-            <Button className="rounded-xl" onClick={handleSave}>
+            <Button className="rounded-xl" onClick={() => void handleSave()}>
               儲存
             </Button>
           </DialogFooter>

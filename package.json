@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "db:link": "npx supabase@latest link",
+    "db:push": "npx supabase@latest db push",
+    "db:status": "npx supabase@latest migration list",
+    "db:login": "npx supabase@latest login",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",

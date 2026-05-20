@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Camera, ShieldAlert } from "lucide-react";
-import { PublicDataLoading, usePublicDataById } from "@/lib/dataFallback";
+import { PublicDataLoading, usePublicDataById } from "@/lib/publicData";
 import { getFallbackAlbumById, loadPublicAlbumById } from "@/services/albumsService";
 
 export default function AlbumDetail() {

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { albumCategories } from "@/data/mock";
-import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getPublicAlbums } from "@/lib/storage";
 import { loadPublicAlbums } from "@/services/albumsService";
 import { cn } from "@/lib/utils";

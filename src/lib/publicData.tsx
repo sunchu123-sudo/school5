@@ -1,53 +1,30 @@
-import { useEffect, useState } from "react";
-
-/**
- * Supabase → localStorage → mock 備援解析。
- * fetchRemote 回傳 null 代表未設定或查詢失敗；hasData 為 false 時改用 getFallback。
- */
-export async function resolveWithFallback<T>(options: {
-  fetchRemote: () => Promise<T | null>;
-  getFallback: () => T;
-  hasData?: (data: T) => boolean;
-}): Promise<T> {
-  const { fetchRemote, getFallback, hasData = defaultHasData } = options;
-
-  try {
-    const remote = await fetchRemote();
-    if (remote !== null && hasData(remote)) {
-      return remote;
-    }
-  } catch (error) {
-    console.warn("[dataFallback] Supabase 讀取失敗，改用備援資料", error);
-  }
-
-  return getFallback();
-}
-
-function defaultHasData<T>(data: T): boolean {
-  if (data === null || data === undefined) return false;
-  if (Array.isArray(data)) return data.length > 0;
-  if (typeof data === "object") return Object.keys(data as object).length > 0;
-  return true;
-}
+import { useEffect, useRef, useState } from "react";
+import { resolveWithFallback } from "@/lib/dataFallback";
 
 /** 前台非同步資料載入 hook；loader 應來自 service 模組（穩定引用） */
 export function usePublicData<T>(
   loader: () => Promise<T>,
   getFallback: () => T,
 ): { data: T; loading: boolean; isEmpty: boolean } {
-  const [data, setData] = useState<T>(getFallback);
+  const [data, setData] = useState<T>(() => getFallback());
   const [loading, setLoading] = useState(true);
+
+  const loaderRef = useRef(loader);
+  const fallbackRef = useRef(getFallback);
+  loaderRef.current = loader;
+  fallbackRef.current = getFallback;
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    loader()
+    loaderRef
+      .current()
       .then((result) => {
         if (!cancelled) setData(result);
       })
       .catch(() => {
-        if (!cancelled) setData(getFallback());
+        if (!cancelled) setData(fallbackRef.current());
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -56,7 +33,7 @@ export function usePublicData<T>(
     return () => {
       cancelled = true;
     };
-  }, [loader, getFallback]);
+  }, []);
 
   const isEmpty = Array.isArray(data)
     ? data.length === 0
@@ -74,6 +51,11 @@ export function usePublicDataById<T>(
   const [data, setData] = useState<T | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
+  const loaderRef = useRef(loader);
+  const fallbackRef = useRef(getFallbackById);
+  loaderRef.current = loader;
+  fallbackRef.current = getFallbackById;
+
   useEffect(() => {
     if (!id) {
       setData(null);
@@ -85,15 +67,15 @@ export function usePublicDataById<T>(
     setLoading(true);
 
     resolveWithFallback({
-      fetchRemote: () => loader(id),
-      getFallback: () => getFallbackById(id) ?? null,
+      fetchRemote: () => loaderRef.current(id),
+      getFallback: () => fallbackRef.current(id) ?? null,
       hasData: (item) => item !== null && item !== undefined,
     })
       .then((result) => {
         if (!cancelled) setData(result);
       })
       .catch(() => {
-        if (!cancelled) setData(getFallbackById(id) ?? null);
+        if (!cancelled) setData(fallbackRef.current(id) ?? null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -102,7 +84,7 @@ export function usePublicDataById<T>(
     return () => {
       cancelled = true;
     };
-  }, [id, loader, getFallbackById]);
+  }, [id]);
 
   return { data, loading };
 }

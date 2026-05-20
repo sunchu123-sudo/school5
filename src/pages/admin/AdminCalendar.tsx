@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Eye, Search, X, RotateCcw, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,15 @@ import {
   loadFromStorage,
   saveToStorage,
 } from "@/lib/admin-storage";
-
-type CalendarEvent = SchoolEvent & { important?: boolean };
+import type { CalendarEvent } from "@/lib/storage";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  calendarWriteFromForm,
+  createCalendarEvent,
+  deleteCalendarEvent,
+  fetchAdminCalendarEvents,
+  updateCalendarEvent,
+} from "@/services/calendarService";
 
 const CATEGORIES: SchoolEvent["category"][] = ["全校", "班級", "活動", "放假", "評量", "社團"];
 const FILTER_CATEGORIES = ["全部", "全校", "班級", "活動", "放假", "評量"] as const;
@@ -115,6 +122,20 @@ function persistEvents(list: CalendarEvent[]) {
   saveToStorage(ADMIN_STORAGE_KEYS.calendarEvents, list);
 }
 
+function mergeCloudEvents(rows: CalendarEvent[]): CalendarEvent[] {
+  return rows.map((e) => ({
+    ...e,
+    weekday: e.weekday || getWeekday(e.date),
+  }));
+}
+
+async function fetchCloudCalendarList(): Promise<CalendarEvent[] | null> {
+  if (!isSupabaseConfigured()) return null;
+  const raw = await fetchAdminCalendarEvents();
+  if (raw === null) return null;
+  return mergeCloudEvents(raw);
+}
+
 function matchesSearch(item: CalendarEvent, query: string) {
   if (!query) return true;
   const q = query.toLowerCase();
@@ -126,13 +147,48 @@ function matchesSearch(item: CalendarEvent, query: string) {
 }
 
 export default function AdminCalendar() {
-  const [list, setList] = useState<CalendarEvent[]>(() => loadInitialEvents());
+  const [list, setList] = useState<CalendarEvent[]>([]);
+  const [useCloud, setUseCloud] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("全部");
   const [formOpen, setFormOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<CalendarEvent | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (isSupabaseConfigured()) {
+        try {
+          const raw = await fetchAdminCalendarEvents();
+          if (cancelled) return;
+          if (raw !== null) {
+            setUseCloud(true);
+            const next = mergeCloudEvents(raw);
+            setList(next);
+            persistEvents(next);
+            setHydrated(true);
+            return;
+          }
+          console.error("[AdminCalendar] fetchAdminCalendarEvents 回傳 null");
+          toast.error("雲端資料庫讀取失敗，已改用瀏覽器暫存資料。");
+        } catch (e) {
+          console.error("[AdminCalendar] 初始載入雲端失敗", e);
+          if (!cancelled) toast.error("雲端資料庫讀取失敗，已改用瀏覽器暫存資料。");
+        }
+      }
+      if (!cancelled) {
+        setUseCloud(false);
+        setList(loadInitialEvents());
+        setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim();
@@ -165,7 +221,7 @@ export default function AdminCalendar() {
     setFormOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim()) {
       toast.error("請填寫活動標題");
       return;
@@ -173,6 +229,106 @@ export default function AdminCalendar() {
 
     const weekday = getWeekday(form.date);
     const note = form.description.trim() || undefined;
+    const writePayload = calendarWriteFromForm({
+      title: form.title.trim(),
+      date: form.date,
+      time: form.time.trim(),
+      category: form.category,
+      location: form.location.trim(),
+      description: form.description.trim(),
+      important: form.important,
+      isVisible: true,
+    });
+
+    const afterSaveClose = () => {
+      setFormOpen(false);
+      setEditingId(null);
+      setForm(emptyForm());
+    };
+
+    const runLocalEdit = (fallbackMsg: string) => {
+      if (editingId) {
+        const next = list.map((e) =>
+          e.id === editingId
+            ? {
+                ...e,
+                title: form.title.trim(),
+                date: form.date,
+                weekday,
+                time: form.time.trim(),
+                category: form.category,
+                location: form.location.trim(),
+                note,
+                important: form.important,
+              }
+            : e,
+        );
+        setList(next);
+        persistEvents(next);
+        toast.success(fallbackMsg);
+        if (previewItem?.id === editingId) {
+          setPreviewItem(next.find((e) => e.id === editingId) ?? null);
+        }
+      } else {
+        const newItem: CalendarEvent = {
+          id: `e-${Date.now()}`,
+          title: form.title.trim(),
+          date: form.date,
+          weekday,
+          time: form.time.trim(),
+          category: form.category,
+          location: form.location.trim(),
+          audience: "全校",
+          note,
+          important: form.important,
+        };
+        const next = [...list, newItem];
+        setList(next);
+        persistEvents(next);
+        toast.success(fallbackMsg);
+      }
+      afterSaveClose();
+    };
+
+    if (useCloud && isSupabaseConfigured()) {
+      try {
+        if (editingId) {
+          const ok = await updateCalendarEvent(editingId, writePayload);
+          if (ok) {
+            const reloaded = await fetchCloudCalendarList();
+            if (reloaded !== null) {
+              setList(reloaded);
+              persistEvents(reloaded);
+              if (previewItem?.id === editingId) {
+                const updated = reloaded.find((x) => x.id === editingId);
+                if (updated) setPreviewItem(updated);
+              }
+              toast.success("已更新活動並儲存至雲端");
+              afterSaveClose();
+              return;
+            }
+          }
+        } else {
+          const created = await createCalendarEvent(writePayload);
+          if (created?.id) {
+            const reloaded = await fetchCloudCalendarList();
+            if (reloaded !== null) {
+              setList(reloaded);
+              persistEvents(reloaded);
+              toast.success("已新增活動並儲存至雲端");
+              afterSaveClose();
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[AdminCalendar] 雲端儲存失敗", e);
+      }
+      toast.error("雲端資料庫操作失敗，請稍後再試。");
+      setUseCloud(false);
+      runLocalEdit("已將變更儲存在此瀏覽器（雲端暫無法同步）");
+      return;
+    }
 
     if (editingId) {
       const next = list.map((e) =>
@@ -195,7 +351,7 @@ export default function AdminCalendar() {
       if (previewItem?.id === editingId) {
         setPreviewItem(next.find((e) => e.id === editingId) ?? null);
       }
-      toast.success("已更新活動");
+      toast.success("已更新活動並儲存在此瀏覽器");
     } else {
       const newItem: CalendarEvent = {
         id: `e-${Date.now()}`,
@@ -212,25 +368,51 @@ export default function AdminCalendar() {
       const next = [...list, newItem];
       setList(next);
       persistEvents(next);
-      toast.success("已新增活動");
+      toast.success("已新增活動並儲存在此瀏覽器");
     }
 
-    setFormOpen(false);
-    setEditingId(null);
-    setForm(emptyForm());
+    afterSaveClose();
   };
 
-  const handleDelete = (item: CalendarEvent) => {
+  const handleDelete = async (item: CalendarEvent) => {
     const ok = window.confirm(`確定要刪除「${item.title}」嗎？此操作無法復原（可使用「恢復預設行事曆」還原 mock 資料）。`);
     if (!ok) return;
+
+    let fallbackFromCloudFailure = false;
+
+    if (useCloud && isSupabaseConfigured()) {
+      try {
+        const deleted = await deleteCalendarEvent(item.id);
+        if (deleted) {
+          const reloaded = await fetchCloudCalendarList();
+          if (reloaded !== null) {
+            setList(reloaded);
+            persistEvents(reloaded);
+            if (previewItem?.id === item.id) setPreviewItem(null);
+            toast.success("已刪除雲端活動");
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("[AdminCalendar] 雲端刪除失敗", e);
+      }
+      toast.error("雲端資料庫操作失敗，請稍後再試。");
+      setUseCloud(false);
+      fallbackFromCloudFailure = true;
+    }
+
     const next = list.filter((e) => e.id !== item.id);
     setList(next);
     persistEvents(next);
     if (previewItem?.id === item.id) setPreviewItem(null);
-    toast.success("已刪除活動");
+    toast.success(fallbackFromCloudFailure ? "已從瀏覽器暫存移除活動" : "已刪除活動");
   };
 
   const handleReset = () => {
+    if (useCloud && isSupabaseConfigured()) {
+      toast.info("目前使用雲端資料庫，恢復預設功能暫不會清除雲端資料。");
+      return;
+    }
     const ok = window.confirm("確定要恢復預設行事曆資料嗎？目前瀏覽器中的行事曆修改將全部清除。");
     if (!ok) return;
     clearStorage(ADMIN_STORAGE_KEYS.calendarEvents);
@@ -243,6 +425,15 @@ export default function AdminCalendar() {
     toast.success("已恢復預設行事曆資料");
   };
 
+  if (!hydrated) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-foreground">行事曆管理</h2>
+        <p className="text-sm text-muted-foreground">資料載入中…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -251,8 +442,10 @@ export default function AdminCalendar() {
           <p className="mt-1 text-sm text-muted-foreground">
             共 {list.length} 筆活動 · 目前顯示 {filtered.length} 筆
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            目前行事曆資料儲存在此瀏覽器中，尚未連接雲端資料庫。
+          <p className="mt-1 text-xs font-medium text-foreground">
+            {useCloud && isSupabaseConfigured()
+              ? "目前資料來源：Supabase 雲端資料庫"
+              : "目前資料來源：此瀏覽器暫存資料"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -403,7 +596,7 @@ export default function AdminCalendar() {
                   variant="outline"
                   size="sm"
                   className="text-destructive"
-                  onClick={() => handleDelete(e)}
+                  onClick={() => void handleDelete(e)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   刪除
@@ -506,7 +699,7 @@ export default function AdminCalendar() {
             <Button variant="outline" className="rounded-xl" onClick={() => setFormOpen(false)}>
               取消
             </Button>
-            <Button className="rounded-xl" onClick={handleSave}>
+            <Button className="rounded-xl" onClick={() => void handleSave()}>
               儲存
             </Button>
           </DialogFooter>

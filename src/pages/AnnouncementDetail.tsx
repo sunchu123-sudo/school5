@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Paperclip, ExternalLink, Calendar } from "lucide-react";
-import { PublicDataLoading, usePublicDataById } from "@/lib/dataFallback";
+import { PublicDataLoading, usePublicDataById } from "@/lib/publicData";
 import {
   getFallbackAnnouncementById,
   loadPublicAnnouncementById,
