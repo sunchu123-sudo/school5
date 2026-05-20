@@ -1,7 +1,8 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { useBackLink } from "@/hooks/use-back-link";
 import { todayInfo, weeklyLunch, nutritionTip } from "@/data/mock";
-import { getPublicTodayLunch } from "@/lib/storage";
+import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { getFallbackTodayLunch, loadPublicTodayLunch } from "@/services/lunchService";
 import { Apple, Leaf, UtensilsCrossed } from "lucide-react";
 
 function formatDateShort(date: string) {
@@ -15,7 +16,10 @@ function formatWeekdayShort(weekday: string) {
 
 export default function LunchInfo() {
   const { backTo, backLabel } = useBackLink("/");
-  const todayLunch = getPublicTodayLunch();
+  const { data: todayLunch, loading } = usePublicData(
+    loadPublicTodayLunch,
+    getFallbackTodayLunch,
+  );
 
   const lunchItems = [
     { label: "主食", value: todayLunch.main },
@@ -30,6 +34,7 @@ export default function LunchInfo() {
       <BackPageHeader title="午餐資訊" subtitle="今日與本週菜單、營養小提醒" backTo={backTo} backLabel={backLabel} />
 
       <div className="px-5 pt-5 space-y-6">
+        {loading && <PublicDataLoading />}
         <section>
           <h2 className="text-[16px] font-bold mb-3 flex items-center gap-2">
             <UtensilsCrossed size={18} className="text-primary" />

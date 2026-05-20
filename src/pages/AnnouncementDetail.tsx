@@ -1,10 +1,26 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Paperclip, ExternalLink, Calendar } from "lucide-react";
-import { getPublicAnnouncements } from "@/lib/storage";
+import { PublicDataLoading, usePublicDataById } from "@/lib/dataFallback";
+import {
+  getFallbackAnnouncementById,
+  loadPublicAnnouncementById,
+} from "@/services/announcementsService";
 
 export default function AnnouncementDetail() {
   const { id } = useParams();
-  const a = getPublicAnnouncements().find((x) => x.id === id);
+  const { data: a, loading } = usePublicDataById(
+    id,
+    loadPublicAnnouncementById,
+    (announcementId) => getFallbackAnnouncementById(announcementId),
+  );
+
+  if (loading) {
+    return (
+      <main className="page-pad">
+        <PublicDataLoading />
+      </main>
+    );
+  }
 
   if (!a) {
     return (

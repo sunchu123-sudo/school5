@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
-import { events, SchoolEvent } from "@/data/mock";
+import { SchoolEvent } from "@/data/mock";
+import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { getPublicCalendarEvents } from "@/lib/storage";
+import { loadPublicCalendarEvents } from "@/services/calendarService";
 import { cn } from "@/lib/utils";
 import { MapPin, Clock, Users } from "lucide-react";
 
@@ -45,6 +48,10 @@ function EventCard({ e }: { e: SchoolEvent }) {
 
 export default function CalendarPage() {
   const [cat, setCat] = useState<(typeof cats)[number]>("全部");
+  const { data: events, loading } = usePublicData(
+    loadPublicCalendarEvents,
+    getPublicCalendarEvents,
+  );
   const filter = (list: SchoolEvent[]) => cat === "全部" ? list : list.filter((e) => e.category === cat);
 
   const todayE = filter(events.filter((e) => e.date === today));
@@ -71,6 +78,8 @@ export default function CalendarPage() {
           ))}
         </div>
       </div>
+
+      {loading && <PublicDataLoading className="px-5 pt-4 text-center text-sm text-muted-foreground" />}
 
       <section className="px-5 mt-5">
         <h2 className="text-base font-bold mb-3">今日活動</h2>

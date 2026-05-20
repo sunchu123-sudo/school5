@@ -1,18 +1,33 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Camera, ShieldAlert } from "lucide-react";
-import { albums } from "@/data/mock";
+import { PublicDataLoading, usePublicDataById } from "@/lib/dataFallback";
+import { getFallbackAlbumById, loadPublicAlbumById } from "@/services/albumsService";
 
 export default function AlbumDetail() {
   const { id } = useParams();
-  const al = albums.find((x) => x.id === id);
+  const { data: al, loading } = usePublicDataById(
+    id,
+    loadPublicAlbumById,
+    (albumId) => getFallbackAlbumById(albumId),
+  );
+
+  if (loading) {
+    return (
+      <main className="page-pad">
+        <PublicDataLoading />
+      </main>
+    );
+  }
+
   if (!al) {
     return (
       <main className="page-pad">
         <Link to="/albums" className="text-primary inline-flex items-center gap-1"><ArrowLeft size={18}/> 返回</Link>
-        <p className="mt-6 text-muted-foreground">找不到相簿</p>
+        <p className="mt-6 text-muted-foreground">找不到這本相簿</p>
       </main>
     );
   }
+
   return (
     <main className="pb-28">
       <div className="px-5 pt-6 pb-5 bg-gradient-soft border-b border-border/50">

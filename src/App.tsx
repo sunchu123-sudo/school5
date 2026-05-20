@@ -19,6 +19,8 @@ import Location from "./pages/Location";
 import FormDownload from "./pages/FormDownload";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./components/admin/AdminLayout";
+import AdminProtectedRoute from "./components/admin/AdminProtectedRoute";
+import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAnnouncements from "./pages/admin/AdminAnnouncements";
 import AdminCalendar from "./pages/admin/AdminCalendar";
@@ -52,15 +54,18 @@ const App = () => (
             <Route path="/location" element={<Location />} />
             <Route path="/forms" element={<FormDownload />} />
           </Route>
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="announcements" element={<AdminAnnouncements />} />
-            <Route path="calendar" element={<AdminCalendar />} />
-            <Route path="lunch" element={<AdminLunch />} />
-            <Route path="albums" element={<AdminAlbums />} />
-            <Route path="school" element={<AdminSchoolInfo />} />
-            <Route path="forms" element={<AdminForms />} />
-            <Route path="settings" element={<AdminSettings />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route element={<AdminProtectedRoute />}>
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="announcements" element={<AdminAnnouncements />} />
+              <Route path="calendar" element={<AdminCalendar />} />
+              <Route path="lunch" element={<AdminLunch />} />
+              <Route path="albums" element={<AdminAlbums />} />
+              <Route path="school" element={<AdminSchoolInfo />} />
+              <Route path="forms" element={<AdminForms />} />
+              <Route path="settings" element={<AdminSettings />} />
+            </Route>
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

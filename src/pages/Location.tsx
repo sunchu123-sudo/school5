@@ -1,13 +1,24 @@
 import BackPageHeader from "@/components/BackPageHeader";
-import { locationInfo, schoolInfo } from "@/data/mock";
+import { locationInfo } from "@/data/mock";
+import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { getFallbackSchoolInfo, loadPublicSchoolInfo } from "@/services/schoolService";
 import { Bus, Map, MapPin, Landmark } from "lucide-react";
 
 export default function Location() {
+  const { data: schoolInfo, loading } = usePublicData(
+    loadPublicSchoolInfo,
+    getFallbackSchoolInfo,
+  );
+  const transportLines = schoolInfo.transportation
+    ? schoolInfo.transportation.split("\n").filter(Boolean)
+    : locationInfo.transport;
+
   return (
     <main className="pb-28">
       <BackPageHeader title="交通位置" subtitle="地址、交通方式與附近地標" backTo="/more" backLabel="返回更多" />
 
       <div className="px-5 pt-5 space-y-5">
+        {loading && <PublicDataLoading />}
         <section>
           <h2 className="text-[16px] font-bold mb-3 flex items-center gap-2">
             <MapPin size={18} className="text-primary" />
@@ -24,7 +35,7 @@ export default function Location() {
             交通方式
           </h2>
           <div className="card-base p-4 space-y-3">
-            {locationInfo.transport.map((line) => (
+            {transportLines.map((line) => (
               <p key={line} className="text-[14px] leading-relaxed text-foreground/90 flex gap-2">
                 <span className="text-primary shrink-0">•</span>
                 {line}

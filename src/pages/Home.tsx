@@ -4,7 +4,10 @@ import {
   ChevronRight, School, Utensils as UtensilsIcon, CalendarCheck, BellRing, Sun,
 } from "lucide-react";
 import { events, todayHighlights, todayInfo } from "@/data/mock";
+import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
 import { getPublicAnnouncements, getPublicTodayLunch } from "@/lib/storage";
+import { loadPublicAnnouncements } from "@/services/announcementsService";
+import { getFallbackTodayLunch, loadPublicTodayLunch } from "@/services/lunchService";
 
 function formatDateShort(date: string) {
   const m = date.match(/(\d{1,2})月(\d{1,2})日/);
@@ -35,8 +38,14 @@ function MountainDecor() {
 }
 
 export default function Home() {
-  const announcements = getPublicAnnouncements();
-  const todayLunch = getPublicTodayLunch();
+  const { data: announcements, loading: announcementsLoading } = usePublicData(
+    loadPublicAnnouncements,
+    getPublicAnnouncements,
+  );
+  const { data: todayLunch, loading: lunchLoading } = usePublicData(
+    loadPublicTodayLunch,
+    getFallbackTodayLunch,
+  );
   const latest = announcements.slice(0, 3);
   const upcoming = events.filter((e) => e.date >= "2026-05-18").slice(0, 2);
   const { event: todayEvent } = todayHighlights;
@@ -67,6 +76,9 @@ export default function Home() {
       </section>
 
       {/* 今日重點 - 緊湊版 */}
+      {(announcementsLoading || lunchLoading) && (
+        <p className="-mt-6 mb-2 text-center text-xs text-muted-foreground">資料載入中…</p>
+      )}
       <section className="-mt-8 relative">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-[16px] font-bold flex items-center gap-1.5">

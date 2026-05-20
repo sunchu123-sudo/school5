@@ -1,16 +1,23 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { useBackLink } from "@/hooks/use-back-link";
-import { schoolInfo, contactTopics } from "@/data/mock";
+import { contactTopics } from "@/data/mock";
+import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { getFallbackSchoolInfo, loadPublicSchoolInfo } from "@/services/schoolService";
 import { Clock, MapPin, Phone, Map, MessageCircle } from "lucide-react";
 
 export default function ContactSchool() {
   const { backTo, backLabel } = useBackLink("/");
+  const { data: schoolInfo, loading } = usePublicData(
+    loadPublicSchoolInfo,
+    getFallbackSchoolInfo,
+  );
 
   return (
     <main className="pb-28">
       <BackPageHeader title="聯絡學校" subtitle="電話、地址與常用聯絡項目" backTo={backTo} backLabel={backLabel} />
 
       <div className="px-5 pt-5 space-y-5">
+        {loading && <PublicDataLoading />}
         <div className="card-base p-4 space-y-4">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary-soft text-primary grid place-items-center shrink-0">

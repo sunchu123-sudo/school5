@@ -1,6 +1,11 @@
 export const ADMIN_STORAGE_KEYS = {
   announcements: "admin_announcements",
   todayLunch: "admin_today_lunch",
+  loggedIn: "admin_logged_in",
+  calendarEvents: "admin_calendar_events",
+  albums: "admin_albums",
+  schoolInfo: "admin_school_info",
+  forms: "admin_forms",
 } as const;
 
 export interface AdminTodayLunchForm {
@@ -60,6 +65,50 @@ export function isAdminTodayLunchForm(value: unknown): value is AdminTodayLunchF
   );
 }
 
+export function isSchoolEventArray(value: unknown): value is Record<string, unknown>[] {
+  if (!Array.isArray(value)) return false;
+  return value.every(
+    (item) =>
+      isRecord(item) &&
+      typeof item.id === "string" &&
+      typeof item.title === "string" &&
+      typeof item.date === "string" &&
+      typeof item.category === "string",
+  );
+}
+
+export function isAlbumArray(value: unknown): value is Record<string, unknown>[] {
+  if (!Array.isArray(value)) return false;
+  return value.every(
+    (item) =>
+      isRecord(item) &&
+      typeof item.id === "string" &&
+      typeof item.title === "string" &&
+      typeof item.date === "string" &&
+      typeof item.category === "string",
+  );
+}
+
+export function isSchoolInfoRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.phone === "string" &&
+    typeof value.address === "string"
+  );
+}
+
+export function isAdminFormArray(value: unknown): value is Record<string, unknown>[] {
+  if (!Array.isArray(value)) return false;
+  return value.every(
+    (item) =>
+      isRecord(item) &&
+      typeof item.id === "string" &&
+      typeof item.title === "string" &&
+      typeof item.category === "string",
+  );
+}
+
 export function loadFromStorage<T>(key: string, validate: (value: unknown) => value is T): T | null {
   return readJson(key, validate);
 }
@@ -91,4 +140,26 @@ export function lunchFromMock(lunch: {
     soup: lunch.soup,
     fruit: lunch.fruit,
   };
+}
+
+export function isAdminLoggedIn(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(ADMIN_STORAGE_KEYS.loggedIn) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setAdminLoggedIn(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ADMIN_STORAGE_KEYS.loggedIn, "true");
+  } catch {
+    // ignore
+  }
+}
+
+export function clearAdminLoggedIn(): void {
+  clearStorage(ADMIN_STORAGE_KEYS.loggedIn);
 }

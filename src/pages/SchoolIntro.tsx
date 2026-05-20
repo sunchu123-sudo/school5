@@ -1,16 +1,34 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { schoolIntroSections } from "@/data/mock";
+import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { getFallbackSchoolInfo, loadPublicSchoolInfo } from "@/services/schoolService";
 import { School, Sparkles, Mountain, Target } from "lucide-react";
 
 const sectionIcons = [School, Sparkles, Mountain, Target];
 
 export default function SchoolIntro() {
+  const { data: schoolInfo, loading } = usePublicData(
+    loadPublicSchoolInfo,
+    getFallbackSchoolInfo,
+  );
+
+  const sections = schoolIntroSections.map((section) => {
+    if (section.title === "學校簡介" && schoolInfo.intro) {
+      return { ...section, content: schoolInfo.intro };
+    }
+    if (section.title === "學校願景" && schoolInfo.vision) {
+      return { ...section, content: schoolInfo.vision };
+    }
+    return section;
+  });
+
   return (
     <main className="pb-28">
       <BackPageHeader title="學校介紹" subtitle="認識三棧國小的故事與願景" backTo="/more" backLabel="返回更多" />
 
       <div className="px-5 pt-5 space-y-4">
-        {schoolIntroSections.map((section, i) => {
+        {loading && <PublicDataLoading />}
+        {sections.map((section, i) => {
           const Icon = sectionIcons[i] ?? School;
           return (
             <article key={section.title} className="card-base p-4">

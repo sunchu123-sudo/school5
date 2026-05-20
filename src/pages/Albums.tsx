@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Camera, ShieldAlert, Trophy, Mountain, Leaf, School,
   BookOpen, Users, LucideIcon,
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
-import { albums, albumCategories } from "@/data/mock";
+import { albumCategories } from "@/data/mock";
+import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { getPublicAlbums } from "@/lib/storage";
+import { loadPublicAlbums } from "@/services/albumsService";
 import { cn } from "@/lib/utils";
 
 const categoryVisual: Record<string, { icon: LucideIcon; gradient: string; color: string }> = {
@@ -21,6 +24,10 @@ const fallback = { icon: Camera, gradient: "from-primary-soft via-secondary-soft
 
 export default function Albums() {
   const [cat, setCat] = useState<string>("最新活動");
+  const { data: albums, loading, isEmpty } = usePublicData(
+    loadPublicAlbums,
+    getPublicAlbums,
+  );
   const list = cat === "最新活動" ? albums : albums.filter((a) => a.category === cat);
 
   return (
@@ -49,6 +56,8 @@ export default function Albums() {
         </div>
       </div>
 
+      {loading && <PublicDataLoading className="px-5 pt-4" />}
+
       <div className="px-5 mt-4 grid grid-cols-2 gap-3">
         {list.map((al) => {
           const v = categoryVisual[al.category] ?? fallback;
@@ -71,7 +80,9 @@ export default function Albums() {
         })}
       </div>
 
-      {list.length === 0 && (
+      {!loading && isEmpty && <PublicDataEmpty />}
+
+      {list.length === 0 && !loading && !isEmpty && (
         <div className="text-center text-muted-foreground py-12 text-sm">此分類暫無相簿</div>
       )}
     </main>

@@ -1,8 +1,12 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, School } from "lucide-react";
+import { ArrowLeft, LogOut, School } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function AdminHeader() {
+type AdminHeaderProps = {
+  onLogout: () => void;
+};
+
+export default function AdminHeader({ onLogout }: AdminHeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-card/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
@@ -17,13 +21,19 @@ export default function AdminHeader() {
             </h1>
           </div>
         </div>
-        <Button variant="outline" size="sm" asChild className="shrink-0 rounded-xl border-primary/20">
-          <Link to="/">
-            <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">返回前台</span>
-            <span className="sm:hidden">前台</span>
-          </Link>
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" size="sm" className="rounded-xl border-primary/20" onClick={onLogout}>
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">登出</span>
+          </Button>
+          <Button variant="outline" size="sm" asChild className="rounded-xl border-primary/20">
+            <Link to="/">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">返回前台</span>
+              <span className="sm:hidden">前台</span>
+            </Link>
+          </Button>
+        </div>
       </div>
     </header>
   );

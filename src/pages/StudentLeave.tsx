@@ -1,9 +1,15 @@
 import BackPageHeader from "@/components/BackPageHeader";
-import { schoolInfo, leaveProcess, leaveDocuments } from "@/data/mock";
+import { leaveProcess, leaveDocuments } from "@/data/mock";
+import { PublicDataLoading, usePublicData } from "@/lib/dataFallback";
+import { getFallbackSchoolInfo, loadPublicSchoolInfo } from "@/services/schoolService";
 import { ClipboardList, FileText, Phone, ClipboardEdit } from "lucide-react";
 import { toast } from "sonner";
 
 export default function StudentLeave() {
+  const { data: schoolInfo, loading } = usePublicData(
+    loadPublicSchoolInfo,
+    getFallbackSchoolInfo,
+  );
   const handleDemoForm = () => {
     toast.info("請假表單功能開發中", {
       description: "目前為示意按鈕，正式上線後可線上填寫。",
@@ -15,6 +21,7 @@ export default function StudentLeave() {
       <BackPageHeader title="學生請假" subtitle="請假流程與聯絡方式說明" backTo="/" backLabel="返回首頁" />
 
       <div className="px-5 pt-5 space-y-5">
+        {loading && <PublicDataLoading />}
         <section>
           <h2 className="text-[16px] font-bold mb-3 flex items-center gap-2">
             <ClipboardList size={18} className="text-primary" />

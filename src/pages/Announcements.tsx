@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import { Search, Paperclip, ExternalLink } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { AnnouncementCategory } from "@/data/mock";
+import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/dataFallback";
 import { getPublicAnnouncements } from "@/lib/storage";
+import { loadPublicAnnouncements } from "@/services/announcementsService";
 import { cn } from "@/lib/utils";
 
 const tabs: ("全部" | AnnouncementCategory)[] = [
@@ -14,7 +16,10 @@ export default function Announcements() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("全部");
   const [q, setQ] = useState("");
 
-  const announcements = useMemo(() => getPublicAnnouncements(), []);
+  const { data: announcements, loading, isEmpty } = usePublicData(
+    loadPublicAnnouncements,
+    getPublicAnnouncements,
+  );
 
   const list = useMemo(() => {
     return announcements.filter((a) => {
@@ -59,7 +64,9 @@ export default function Announcements() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {list.length === 0 && (
+          {loading && <PublicDataLoading />}
+          {!loading && isEmpty && <PublicDataEmpty />}
+          {!loading && list.length === 0 && !isEmpty && (
             <div className="text-center text-muted-foreground py-12 text-sm">沒有符合的公告</div>
           )}
           {list.map((a) => (
