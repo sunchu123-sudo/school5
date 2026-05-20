@@ -3,7 +3,8 @@ import {
   Megaphone, CalendarDays, Images, Utensils, ClipboardEdit, Phone,
   ChevronRight, School, Utensils as UtensilsIcon, CalendarCheck, BellRing, Sun,
 } from "lucide-react";
-import { announcements, events, todayHighlights, todayInfo, todayLunch } from "@/data/mock";
+import { events, todayHighlights, todayInfo } from "@/data/mock";
+import { getPublicAnnouncements, getPublicTodayLunch } from "@/lib/storage";
 
 function formatDateShort(date: string) {
   const m = date.match(/(\d{1,2})月(\d{1,2})日/);
@@ -34,6 +35,8 @@ function MountainDecor() {
 }
 
 export default function Home() {
+  const announcements = getPublicAnnouncements();
+  const todayLunch = getPublicTodayLunch();
   const latest = announcements.slice(0, 3);
   const upcoming = events.filter((e) => e.date >= "2026-05-18").slice(0, 2);
   const { event: todayEvent } = todayHighlights;

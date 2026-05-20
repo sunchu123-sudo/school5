@@ -1,16 +1,16 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Paperclip, ExternalLink, Calendar } from "lucide-react";
-import { announcements } from "@/data/mock";
+import { getPublicAnnouncements } from "@/lib/storage";
 
 export default function AnnouncementDetail() {
   const { id } = useParams();
-  const a = announcements.find((x) => x.id === id);
+  const a = getPublicAnnouncements().find((x) => x.id === id);
 
   if (!a) {
     return (
       <main className="page-pad">
         <Link to="/announcements" className="text-primary inline-flex items-center gap-1"><ArrowLeft size={18}/> 返回</Link>
-        <p className="mt-6 text-muted-foreground">找不到公告</p>
+        <p className="mt-6 text-muted-foreground">找不到這則公告</p>
       </main>
     );
   }

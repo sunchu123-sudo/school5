@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, Paperclip, ExternalLink } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
-import { announcements, AnnouncementCategory } from "@/data/mock";
+import { AnnouncementCategory } from "@/data/mock";
+import { getPublicAnnouncements } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 const tabs: ("全部" | AnnouncementCategory)[] = [
@@ -13,13 +14,15 @@ export default function Announcements() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("全部");
   const [q, setQ] = useState("");
 
+  const announcements = useMemo(() => getPublicAnnouncements(), []);
+
   const list = useMemo(() => {
     return announcements.filter((a) => {
       const okTab = tab === "全部" || a.category === tab;
-      const okQ = !q || a.title.includes(q) || a.summary.includes(q);
+      const okQ = !q || a.title.includes(q) || a.summary.includes(q) || a.content.includes(q);
       return okTab && okQ;
     });
-  }, [tab, q]);
+  }, [announcements, tab, q]);
 
   return (
     <main className="pb-28">

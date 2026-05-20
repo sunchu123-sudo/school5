@@ -1,6 +1,7 @@
 import BackPageHeader from "@/components/BackPageHeader";
 import { useBackLink } from "@/hooks/use-back-link";
-import { todayInfo, todayLunch, weeklyLunch, nutritionTip } from "@/data/mock";
+import { todayInfo, weeklyLunch, nutritionTip } from "@/data/mock";
+import { getPublicTodayLunch } from "@/lib/storage";
 import { Apple, Leaf, UtensilsCrossed } from "lucide-react";
 
 function formatDateShort(date: string) {
@@ -12,16 +13,17 @@ function formatWeekdayShort(weekday: string) {
   return weekday.replace("星期", "週");
 }
 
-const lunchItems = [
-  { label: "主食", value: todayLunch.main },
-  { label: "主菜", value: todayLunch.mainDish },
-  { label: "副菜", value: todayLunch.sideDishes.join("、") },
-  { label: "湯品", value: todayLunch.soup },
-  { label: "水果", value: todayLunch.fruit },
-];
-
 export default function LunchInfo() {
   const { backTo, backLabel } = useBackLink("/");
+  const todayLunch = getPublicTodayLunch();
+
+  const lunchItems = [
+    { label: "主食", value: todayLunch.main },
+    { label: "主菜", value: todayLunch.mainDish },
+    { label: "副菜", value: todayLunch.sideDishes.join("、") },
+    { label: "湯品", value: todayLunch.soup },
+    { label: "水果", value: todayLunch.fruit },
+  ];
 
   return (
     <main className="pb-28">

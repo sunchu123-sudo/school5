@@ -18,6 +18,15 @@ import SchoolIntro from "./pages/SchoolIntro";
 import Location from "./pages/Location";
 import FormDownload from "./pages/FormDownload";
 import NotFound from "./pages/NotFound";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminAnnouncements from "./pages/admin/AdminAnnouncements";
+import AdminCalendar from "./pages/admin/AdminCalendar";
+import AdminLunch from "./pages/admin/AdminLunch";
+import AdminAlbums from "./pages/admin/AdminAlbums";
+import AdminSchoolInfo from "./pages/admin/AdminSchoolInfo";
+import AdminForms from "./pages/admin/AdminForms";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +51,16 @@ const App = () => (
             <Route path="/school-intro" element={<SchoolIntro />} />
             <Route path="/location" element={<Location />} />
             <Route path="/forms" element={<FormDownload />} />
+          </Route>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="announcements" element={<AdminAnnouncements />} />
+            <Route path="calendar" element={<AdminCalendar />} />
+            <Route path="lunch" element={<AdminLunch />} />
+            <Route path="albums" element={<AdminAlbums />} />
+            <Route path="school" element={<AdminSchoolInfo />} />
+            <Route path="forms" element={<AdminForms />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
