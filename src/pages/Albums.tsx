@@ -9,6 +9,7 @@ import { albumCategories } from "@/data/mock";
 import { PublicDataEmpty, PublicDataLoading, usePublicData } from "@/lib/publicData";
 import { getPublicAlbums } from "@/lib/storage";
 import { loadPublicAlbums } from "@/services/albumsService";
+import { isRemotePhotoUrl } from "@/services/albumStorageService";
 import { cn } from "@/lib/utils";
 
 const categoryVisual: Record<string, { icon: LucideIcon; gradient: string; color: string }> = {
@@ -64,8 +65,20 @@ export default function Albums() {
           const Icon = v.icon;
           return (
             <Link key={al.id} to={`/albums/${al.id}`} className="card-base overflow-hidden active:scale-[0.99] transition">
-              <div className={cn("aspect-[4/3] bg-gradient-to-br grid place-items-center", v.gradient)}>
-                <Icon className={cn(v.color, "drop-shadow-sm")} size={40} strokeWidth={1.8} />
+              <div className={cn("relative aspect-[4/3] overflow-hidden bg-gradient-to-br grid place-items-center", v.gradient)}>
+                {isRemotePhotoUrl(al.coverImage) && (
+                  <img
+                    src={al.coverImage}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                )}
+                <Icon
+                  className={cn(v.color, "relative drop-shadow-sm", isRemotePhotoUrl(al.coverImage) && "opacity-25")}
+                  size={40}
+                  strokeWidth={1.8}
+                />
               </div>
               <div className="p-2.5">
                 <div className="text-[11px] text-secondary font-semibold">{al.category}</div>

@@ -169,10 +169,11 @@ export default function AdminAnnouncements() {
             setHydrated(true);
             return;
           }
-          toast.error("雲端資料庫操作失敗，請稍後再試。");
+          console.error("[AdminAnnouncements] fetchAdminAnnouncements 回傳 null");
+          toast.error("雲端資料庫讀取失敗，已改用瀏覽器暫存資料。");
         } catch (e) {
           console.error("[AdminAnnouncements] 初始載入雲端失敗", e);
-          if (!cancelled) toast.error("雲端資料庫操作失敗，請稍後再試。");
+          if (!cancelled) toast.error("雲端資料庫讀取失敗，已改用瀏覽器暫存資料。");
         }
       }
       if (!cancelled) {

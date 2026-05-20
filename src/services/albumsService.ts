@@ -2,6 +2,11 @@ import type { Album } from "@/data/mock";
 import { resolveWithFallback } from "@/lib/dataFallback";
 import { getPublicAlbumById, getPublicAlbums, type PublicAlbum } from "@/lib/storage";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  isPlaceholderPhoto,
+  removeAlbumStorageFolder,
+  resolvePhotoUrls,
+} from "@/services/albumStorageService";
 
 const ADMIN_TO_DISPLAY_CATEGORY: Record<string, string> = {
   校園生活: "校園生活",
@@ -52,25 +57,22 @@ type AlbumRow = {
   description: string | null;
   photo_count: number;
   cover_image: string | null;
+  photos?: unknown;
   is_visible: boolean;
 };
 
-function buildPhotos(coverImage: string, photoCount: number): string[] {
-  const count = Math.min(Math.max(photoCount, 0), 12);
-  return Array.from({ length: count || 1 }, () => coverImage || "/placeholder.svg");
-}
-
 function mapRow(row: AlbumRow): PublicAlbum {
-  const coverImage = row.cover_image || "/placeholder.svg";
+  const photos = resolvePhotoUrls(row.photos, row.cover_image, row.photo_count ?? 0);
+  const coverImage = photos[0] || row.cover_image || "/placeholder.svg";
   return {
     id: row.id,
     title: row.title,
     date: row.date,
     category: toDisplayCategory(row.category),
-    photoCount: row.photo_count ?? 0,
+    photoCount: photos.length,
     coverImage,
     description: row.description ?? "",
-    photos: buildPhotos(coverImage, row.photo_count ?? 0),
+    photos,
     isVisible: row.is_visible !== false,
   };
 }
@@ -79,17 +81,17 @@ function mapRow(row: AlbumRow): PublicAlbum {
 export type AdminAlbumRecord = Album & { isVisible: boolean };
 
 function mapRowToAdmin(row: AlbumRow): AdminAlbumRecord {
-  const coverImage = row.cover_image || "/placeholder.svg";
-  const photoCount = row.photo_count ?? 0;
+  const photos = resolvePhotoUrls(row.photos, row.cover_image, row.photo_count ?? 0);
+  const coverImage = photos[0] || row.cover_image || "/placeholder.svg";
   return {
     id: row.id,
     title: row.title,
     date: row.date,
     category: rowToAdminCategory(row.category),
-    photoCount,
+    photoCount: photos.length,
     coverImage,
     description: row.description ?? "",
-    photos: buildPhotos(coverImage, photoCount),
+    photos,
     isVisible: row.is_visible !== false,
   };
 }
@@ -101,17 +103,31 @@ export type AlbumWriteInput = {
   description: string;
   photoCount: number;
   coverImage: string;
+  photos?: string[];
   isVisible?: boolean;
 };
 
 function toDbRow(data: AlbumWriteInput): Record<string, unknown> {
+  const storedPhotos = (data.photos ?? [])
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0 && !isPlaceholderPhoto(p))
+    .slice(0, 12);
+
+  const photoCount =
+    storedPhotos.length > 0
+      ? storedPhotos.length
+      : Math.min(Math.max(data.photoCount, 0), 12);
+  const cover =
+    storedPhotos[0] ?? (data.coverImage.trim() || null);
+
   return {
     title: data.title.trim(),
     date: data.date,
     category: data.category,
     description: data.description.trim() || null,
-    photo_count: Math.min(Math.max(data.photoCount, 0), 12),
-    cover_image: data.coverImage.trim() || null,
+    photo_count: photoCount,
+    cover_image: cover,
+    photos: storedPhotos,
     is_visible: data.isVisible !== false,
   };
 }
@@ -123,8 +139,22 @@ export function albumWriteFromForm(input: {
   description: string;
   photoCount: number;
   coverImage: string;
+  photos?: string[];
   isVisible: boolean;
 }): AlbumWriteInput {
+  const photos = input.photos?.filter((p) => p.trim() && !isPlaceholderPhoto(p));
+  if (photos && photos.length > 0) {
+    return {
+      title: input.title,
+      date: input.date,
+      category: input.category,
+      description: input.description,
+      photoCount: photos.length,
+      coverImage: photos[0],
+      photos,
+      isVisible: input.isVisible,
+    };
+  }
   return {
     title: input.title,
     date: input.date,
@@ -263,6 +293,8 @@ export async function deleteAlbum(id: string): Promise<boolean> {
   if (!supabase) return false;
 
   try {
+    await removeAlbumStorageFolder(id);
+
     const { error } = await supabase.from("albums").delete().eq("id", id);
 
     if (error) {

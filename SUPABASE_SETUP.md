@@ -51,6 +51,9 @@
 
 1. [`supabase/policies_dev_anon_announcements_lunch.sql`](./supabase/policies_dev_anon_announcements_lunch.sql) — 公告、午餐  
 2. [`supabase/policies_dev_anon_calendar_albums_school_forms.sql`](./supabase/policies_dev_anon_calendar_albums_school_forms.sql) — 行事曆、相簿、學校資料、表單  
+3. [`supabase/policies_dev_storage_album_photos.sql`](./supabase/policies_dev_storage_album_photos.sql) — **v2.2** 相簿 Storage（`album-photos` bucket + `albums.photos` 欄位）
+
+或使用 CLI：`npx supabase db push`（含 migration `20260520100003_album_photos_storage.sql`）。
 
 檔案開頭有安全提醒：**正式對外網站請勿使用**，應改為 Supabase Auth + 僅管理員可寫入的 RLS。
 
@@ -87,11 +90,12 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJI...
 - 瀏覽器開前台首頁或公告頁，應能載入雲端資料（與種子內容一致或接近）  
 - 後台 **公告／午餐／行事曆／相簿／學校資料／表單** 頂部應顯示：**目前資料來源：Supabase 雲端資料庫**  
 - 儲存後可至 Supabase **Table Editor** 查看對應資料表是否更新  
+- **相簿 v2.2**：後台可上傳照片；Supabase **Storage** → `album-photos` 應有檔案；`albums.photos` 為 URL 陣列  
 
 若仍顯示「此瀏覽器暫存資料」或出現雲端錯誤 toast，請檢查：
 
 - `.env.local` 變數名稱是否**完全一致**（`VITE_` 前綴）  
-- 是否已執行 **步驟 3** 的兩份開發用政策（公告／午餐＋行事曆等四表）  
+- 是否已執行 **步驟 3** 的開發用政策（含相簿 Storage）  
 - SQL Editor 的 **Logs** 或瀏覽器 **Network** 是否為 401／RLS 錯誤  
 
 ---
@@ -113,5 +117,6 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJI...
 | [`supabase/migrations/`](./supabase/migrations/) | CLI `db push` 用 |
 | [`supabase/policies_dev_anon_announcements_lunch.sql`](./supabase/policies_dev_anon_announcements_lunch.sql) | 開發用公告／午餐寫入 |
 | [`supabase/policies_dev_anon_calendar_albums_school_forms.sql`](./supabase/policies_dev_anon_calendar_albums_school_forms.sql) | 開發用行事曆／相簿／學校／表單寫入 |
+| [`supabase/policies_dev_storage_album_photos.sql`](./supabase/policies_dev_storage_album_photos.sql) | v2.2 相簿 Storage + `photos` 欄位 |
 | [`SUPABASE_PLAN_v2.0.md`](./SUPABASE_PLAN_v2.0.md) | 整體規畫 |
 | [**SUPABASE_VERIFY.md**](./SUPABASE_VERIFY.md) | **串線成功簡易判斷標準（勾選用）** |

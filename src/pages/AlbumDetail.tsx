@@ -2,6 +2,11 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Camera, ShieldAlert } from "lucide-react";
 import { PublicDataLoading, usePublicDataById } from "@/lib/publicData";
 import { getFallbackAlbumById, loadPublicAlbumById } from "@/services/albumsService";
+import { isRemotePhotoUrl } from "@/services/albumStorageService";
+
+function isDisplayablePhoto(url: string): boolean {
+  return isRemotePhotoUrl(url) || url.startsWith("data:image/");
+}
 
 export default function AlbumDetail() {
   const { id } = useParams();
@@ -46,9 +51,16 @@ export default function AlbumDetail() {
       </div>
 
       <div className="px-5 mt-4 grid grid-cols-3 gap-2">
-        {al.photos.map((_, i) => (
-          <div key={i} className="aspect-square rounded-xl bg-gradient-to-br from-primary-soft via-secondary-soft to-accent-soft grid place-items-center">
-            <Camera className="text-primary/40" size={20} />
+        {al.photos.map((url, i) => (
+          <div
+            key={i}
+            className="aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-primary-soft via-secondary-soft to-accent-soft grid place-items-center"
+          >
+            {isDisplayablePhoto(url) ? (
+              <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+            ) : (
+              <Camera className="text-primary/40" size={20} />
+            )}
           </div>
         ))}
       </div>

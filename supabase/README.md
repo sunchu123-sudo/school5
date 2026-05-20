@@ -1,6 +1,6 @@
 # Supabase 資料庫設定說明
 
-**階段：** v2.0-C — 資料表 SQL 與初始資料  
+**階段：** v2.0-C — 資料表 SQL 與初始資料；**v2.2** — 相簿 Storage（`album-photos`）  
 **狀態：** 建表與 RLS 已與 App 串接；完整設定步驟見根目錄 [**SUPABASE_SETUP.md**](../SUPABASE_SETUP.md)。
 
 ---
@@ -90,6 +90,7 @@ GET /rest/v1/announcements?is_visible=eq.true
 
 1. [`policies_dev_anon_announcements_lunch.sql`](./policies_dev_anon_announcements_lunch.sql) — 公告、午餐  
 2. [`policies_dev_anon_calendar_albums_school_forms.sql`](./policies_dev_anon_calendar_albums_school_forms.sql) — 行事曆、相簿、學校資料、表單  
+3. [`policies_dev_storage_album_photos.sql`](./policies_dev_storage_album_photos.sql) — v2.2 相簿 Storage（或 `db push` migration `20260520100003`）  
 
 說明見 [SUPABASE_SETUP.md](../SUPABASE_SETUP.md) 步驟 3。
 
@@ -128,6 +129,7 @@ GET /rest/v1/announcements?is_visible=eq.true
 | [`migrations/`](./migrations/) | Supabase CLI `npm run db:push` 套用順序 |
 | [`policies_dev_anon_announcements_lunch.sql`](./policies_dev_anon_announcements_lunch.sql) | 開發用：anon 讀寫公告與午餐（**勿用於正式站**） |
 | [`policies_dev_anon_calendar_albums_school_forms.sql`](./policies_dev_anon_calendar_albums_school_forms.sql) | 開發用：anon 讀寫行事曆／相簿／學校／表單（**勿用於正式站**） |
+| [`policies_dev_storage_album_photos.sql`](./policies_dev_storage_album_photos.sql) | v2.2：`album-photos` bucket + `albums.photos`（**勿用於正式站**） |
 | [`README.md`](./README.md) | 本說明文件 |
 
 ---

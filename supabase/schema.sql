@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS public.albums (
   description  text,
   photo_count  integer NOT NULL DEFAULT 0,
   cover_image  text,
+  photos       jsonb NOT NULL DEFAULT '[]'::jsonb,
   is_visible   boolean NOT NULL DEFAULT true,
   created_at   timestamptz NOT NULL DEFAULT now(),
   updated_at   timestamptz NOT NULL DEFAULT now()

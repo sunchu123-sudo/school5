@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env.vercel*
 
 # Supabase CLI（link 後可能含本機憑證）
 .supabase/

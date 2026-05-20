@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Eye, Search, X, RotateCcw, ImageIcon, EyeOff } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, Search, X, RotateCcw, ImageIcon, EyeOff, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,11 @@ import {
   type AdminAlbumRecord,
   updateAlbum,
 } from "@/services/albumsService";
+import {
+  isPlaceholderPhoto,
+  MAX_ALBUM_PHOTOS,
+  uploadAlbumPhotos,
+} from "@/services/albumStorageService";
 
 type AdminAlbum = AdminAlbumRecord;
 
@@ -63,6 +68,8 @@ type FormState = {
   description: string;
   photoCount: string;
   coverImage: string;
+  photoUrls: string[];
+  pendingFiles: File[];
   isVisible: boolean;
 };
 
@@ -73,8 +80,24 @@ const emptyForm = (): FormState => ({
   description: "",
   photoCount: "12",
   coverImage: "/placeholder.svg",
+  photoUrls: [],
+  pendingFiles: [],
   isVisible: true,
 });
+
+function readFilesAsDataUrls(files: File[]): Promise<string[]> {
+  return Promise.all(
+    files.map(
+      (file) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        }),
+    ),
+  );
+}
 
 function buildPhotos(coverImage: string, photoCount: number, existing?: string[]): string[] {
   if (existing && existing.length > 0) return existing;
@@ -201,6 +224,7 @@ export default function AdminAlbums() {
 
   const openEdit = (item: AdminAlbum) => {
     setEditingId(item.id);
+    const savedPhotos = item.photos.filter((p) => !isPlaceholderPhoto(p));
     setForm({
       title: item.title,
       date: item.date,
@@ -210,6 +234,8 @@ export default function AdminAlbums() {
       description: item.description,
       photoCount: String(item.photoCount),
       coverImage: item.coverImage,
+      photoUrls: savedPhotos.length > 0 ? savedPhotos : [],
+      pendingFiles: [],
       isVisible: item.isVisible !== false,
     });
     setFormOpen(true);
@@ -221,25 +247,62 @@ export default function AdminAlbums() {
       return;
     }
 
-    const photoCount = Math.max(0, Number(form.photoCount) || 0);
-    const coverImage = form.coverImage.trim() || "/placeholder.svg";
-    const writePayload = albumWriteFromForm({
-      title: form.title.trim(),
-      date: form.date,
-      category: form.category,
-      description: form.description.trim(),
-      photoCount,
-      coverImage,
-      isVisible: form.isVisible,
-    });
-
     const afterSaveClose = () => {
       setFormOpen(false);
       setEditingId(null);
       setForm(emptyForm());
     };
 
-    const runLocalEdit = (fallbackMsg: string) => {
+    const mergePhotosForSave = async (albumId: string | null): Promise<string[] | null> => {
+      let urls = form.photoUrls.filter((p) => !isPlaceholderPhoto(p));
+      if (form.pendingFiles.length === 0) return urls;
+
+      const room = MAX_ALBUM_PHOTOS - urls.length;
+      if (room <= 0) {
+        toast.error(`最多 ${MAX_ALBUM_PHOTOS} 張照片`);
+        return null;
+      }
+      const batch = form.pendingFiles.slice(0, room);
+
+      if (useCloud && isSupabaseConfigured() && albumId) {
+        const { urls: uploaded, errors } = await uploadAlbumPhotos(albumId, batch);
+        if (errors.length > 0) {
+          errors.forEach((msg) => toast.error(msg));
+        }
+        if (uploaded.length === 0 && urls.length === 0) return null;
+        urls = [...urls, ...uploaded];
+      } else {
+        try {
+          const dataUrls = await readFilesAsDataUrls(batch);
+          urls = [...urls, ...dataUrls];
+        } catch (e) {
+          console.error("[AdminAlbums] 讀取照片失敗", e);
+          toast.error("照片讀取失敗，請重試");
+          return null;
+        }
+      }
+      return urls.slice(0, MAX_ALBUM_PHOTOS);
+    };
+
+    const buildWritePayload = (photoUrls: string[]) => {
+      const photoCount = photoUrls.length > 0 ? photoUrls.length : Math.max(0, Number(form.photoCount) || 0);
+      const coverImage =
+        photoUrls[0] ?? (form.coverImage.trim() || "/placeholder.svg");
+      return albumWriteFromForm({
+        title: form.title.trim(),
+        date: form.date,
+        category: form.category,
+        description: form.description.trim(),
+        photoCount,
+        coverImage,
+        photos: photoUrls.length > 0 ? photoUrls : undefined,
+        isVisible: form.isVisible,
+      });
+    };
+
+    const runLocalEdit = (fallbackMsg: string, photoUrls: string[]) => {
+      const photoCount = photoUrls.length > 0 ? photoUrls.length : Math.max(0, Number(form.photoCount) || 0);
+      const coverImage = photoUrls[0] ?? (form.coverImage.trim() || "/placeholder.svg");
       if (editingId) {
         const next = list.map((a) =>
           a.id === editingId
@@ -251,7 +314,7 @@ export default function AdminAlbums() {
                 description: form.description.trim(),
                 photoCount,
                 coverImage,
-                photos: buildPhotos(coverImage, photoCount, a.photos),
+                photos: photoUrls.length > 0 ? photoUrls : buildPhotos(coverImage, photoCount, a.photos),
                 isVisible: form.isVisible,
               }
             : a,
@@ -271,7 +334,7 @@ export default function AdminAlbums() {
           description: form.description.trim(),
           photoCount,
           coverImage,
-          photos: buildPhotos(coverImage, photoCount),
+          photos: photoUrls.length > 0 ? photoUrls : buildPhotos(coverImage, photoCount),
           isVisible: form.isVisible,
         };
         const next = [...list, newItem];
@@ -284,33 +347,39 @@ export default function AdminAlbums() {
 
     if (useCloud && isSupabaseConfigured()) {
       try {
-        if (editingId) {
-          const ok = await updateAlbum(editingId, writePayload);
-          if (ok) {
-            const reloaded = await fetchCloudAlbumsList();
-            if (reloaded !== null) {
-              setList(reloaded);
-              persistAlbums(reloaded);
-              if (previewItem?.id === editingId) {
-                const updated = reloaded.find((x) => x.id === editingId);
-                if (updated) setPreviewItem(updated);
-              }
-              toast.success("已更新相簿並儲存至雲端");
-              afterSaveClose();
-              return;
+        let albumId = editingId ?? null;
+        if (!albumId) {
+          const draft = albumWriteFromForm({
+            title: form.title.trim(),
+            date: form.date,
+            category: form.category,
+            description: form.description.trim(),
+            photoCount: 0,
+            coverImage: "/placeholder.svg",
+            isVisible: form.isVisible,
+          });
+          const created = await createAlbum(draft);
+          if (!created?.id) throw new Error("createAlbum failed");
+          albumId = created.id;
+        }
+
+        const photoUrls = await mergePhotosForSave(albumId);
+        if (photoUrls === null) return;
+
+        const writePayload = buildWritePayload(photoUrls);
+        const ok = await updateAlbum(albumId, writePayload);
+        if (ok) {
+          const reloaded = await fetchCloudAlbumsList();
+          if (reloaded !== null) {
+            setList(reloaded);
+            persistAlbums(reloaded);
+            if (previewItem?.id === albumId) {
+              const updated = reloaded.find((x) => x.id === albumId);
+              if (updated) setPreviewItem(updated);
             }
-          }
-        } else {
-          const created = await createAlbum(writePayload);
-          if (created?.id) {
-            const reloaded = await fetchCloudAlbumsList();
-            if (reloaded !== null) {
-              setList(reloaded);
-              persistAlbums(reloaded);
-              toast.success("已新增相簿並儲存至雲端");
-              afterSaveClose();
-              return;
-            }
+            toast.success(editingId ? "已更新相簿並儲存至雲端" : "已新增相簿並儲存至雲端");
+            afterSaveClose();
+            return;
           }
         }
       } catch (e) {
@@ -318,9 +387,16 @@ export default function AdminAlbums() {
       }
       toast.error("雲端資料庫操作失敗，請稍後再試。");
       setUseCloud(false);
-      runLocalEdit("已將變更儲存在此瀏覽器（雲端暫無法同步）");
+      const fallbackUrls = await mergePhotosForSave(null);
+      if (fallbackUrls === null) return;
+      runLocalEdit("已將變更儲存在此瀏覽器（雲端暫無法同步）", fallbackUrls);
       return;
     }
+
+    const localPhotoUrls = await mergePhotosForSave(null);
+    if (localPhotoUrls === null) return;
+    const photoCount = localPhotoUrls.length > 0 ? localPhotoUrls.length : Math.max(0, Number(form.photoCount) || 0);
+    const coverImage = localPhotoUrls[0] ?? (form.coverImage.trim() || "/placeholder.svg");
 
     if (editingId) {
       const next = list.map((a) =>
@@ -333,7 +409,7 @@ export default function AdminAlbums() {
               description: form.description.trim(),
               photoCount,
               coverImage,
-              photos: buildPhotos(coverImage, photoCount, a.photos),
+              photos: localPhotoUrls.length > 0 ? localPhotoUrls : buildPhotos(coverImage, photoCount, a.photos),
               isVisible: form.isVisible,
             }
           : a,
@@ -353,7 +429,7 @@ export default function AdminAlbums() {
         description: form.description.trim(),
         photoCount,
         coverImage,
-        photos: buildPhotos(coverImage, photoCount),
+        photos: localPhotoUrls.length > 0 ? localPhotoUrls : buildPhotos(coverImage, photoCount),
         isVisible: form.isVisible,
       };
       const next = [...list, newItem];
@@ -654,29 +730,114 @@ export default function AdminAlbums() {
                 placeholder="相簿描述"
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="alb-count">照片數</Label>
-                <Input
-                  id="alb-count"
-                  type="number"
-                  min={0}
-                  value={form.photoCount}
-                  onChange={(e) => setForm((f) => ({ ...f, photoCount: e.target.value }))}
-                  className="rounded-xl"
+            <div className="space-y-2">
+              <Label>相簿照片（最多 {MAX_ALBUM_PHOTOS} 張）</Label>
+              <p className="text-xs text-muted-foreground">
+                {useCloud
+                  ? "連線雲端時將上傳至 Supabase Storage；第一張為封面。"
+                  : "未連線雲端時，上傳的照片會暫存在此瀏覽器。"}
+              </p>
+              {(form.photoUrls.length > 0 || form.pendingFiles.length > 0) && (
+                <div className="grid grid-cols-4 gap-2">
+                  {form.photoUrls.map((url, i) => (
+                    <div key={`saved-${i}`} className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 shadow"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            photoUrls: f.photoUrls.filter((_, j) => j !== i),
+                          }))
+                        }
+                        aria-label="移除照片"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {form.pendingFiles.map((file, i) => (
+                    <div key={`pending-${file.name}-${i}`} className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+                      <img src={URL.createObjectURL(file)} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 shadow"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            pendingFiles: f.pendingFiles.filter((_, j) => j !== i),
+                          }))
+                        }
+                        aria-label="移除待上傳照片"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border py-4 text-sm text-muted-foreground hover:bg-muted/50">
+                <Upload className="h-4 w-4" />
+                選擇照片（JPG / PNG / WebP / GIF，單檔 5MB 內）
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (!picked.length) return;
+                    setForm((f) => {
+                      const total = f.photoUrls.length + f.pendingFiles.length + picked.length;
+                      if (total > MAX_ALBUM_PHOTOS) {
+                        toast.error(`最多 ${MAX_ALBUM_PHOTOS} 張照片`);
+                        return f;
+                      }
+                      return { ...f, pendingFiles: [...f.pendingFiles, ...picked] };
+                    });
+                  }}
                 />
-              </div>
+              </label>
+            </div>
+            {useCloud && form.photoUrls.length === 0 && form.pendingFiles.length === 0 && (
               <div className="space-y-2">
-                <Label htmlFor="alb-cover">封面圖片網址</Label>
+                <Label htmlFor="alb-cover-cloud">封面圖片網址（選填，無上傳檔時）</Label>
                 <Input
-                  id="alb-cover"
+                  id="alb-cover-cloud"
                   value={form.coverImage}
                   onChange={(e) => setForm((f) => ({ ...f, coverImage: e.target.value }))}
                   className="rounded-xl"
-                  placeholder="/placeholder.svg"
+                  placeholder="https://..."
                 />
               </div>
-            </div>
+            )}
+            {!useCloud && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="alb-count">照片數（無上傳檔時）</Label>
+                  <Input
+                    id="alb-count"
+                    type="number"
+                    min={0}
+                    value={form.photoCount}
+                    onChange={(e) => setForm((f) => ({ ...f, photoCount: e.target.value }))}
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="alb-cover">封面圖片網址</Label>
+                  <Input
+                    id="alb-cover"
+                    value={form.coverImage}
+                    onChange={(e) => setForm((f) => ({ ...f, coverImage: e.target.value }))}
+                    className="rounded-xl"
+                    placeholder="/placeholder.svg"
+                  />
+                </div>
+              </div>
+            )}
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox
                 checked={form.isVisible}
